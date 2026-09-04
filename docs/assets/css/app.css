@@ -216,3 +216,6 @@ label.file input { display: none; }
 .card.small p { margin: .2rem 0; }
 .card.list .row, .list.plain .row[data-action] { cursor: pointer; }
 .list.plain .row[data-action]:active { background: var(--primary-soft); border-radius: 12px; }
+.list.plain button.row { width: 100%; text-align: left; border: 0; border-top: 1px solid var(--line); background: none; font: inherit; color: inherit; padding: .7rem .2rem; }
+.list.plain button.row:first-child { border-top: 0; }
+.list.plain button.row .ic { font-size: 1.6rem; width: 40px; text-align: center; }
