@@ -11,17 +11,17 @@ import base64, io, json, re, sys
 import pdfplumber
 
 UNCHECKED, CHECKED = '', ''
-SUBJECTS = {  # ECQB-Code → id, Name, Icon, Fragen in der Prüfung (Angabe des Nutzers)
-    '10': ('alw', 'Luftrecht', '📜', 16),
-    '20': ('agk', 'Luftfahrzeugkunde', '🔧', 16),
-    '30': ('met', 'Meteorologie', '🌦️', 16),
-    '40': ('com', 'Kommunikation', '📻', 12),
-    '50': ('nav', 'Navigation', '🧭', 12),
-    '51': ('pfa', 'Aerodynamik', '🛩️', 12),
-    '60': ('opr', 'Betriebliche Verfahren', '📋', 12),
-    '70': ('fpp', 'Flugplanung', '🗺️', 12),
-    '80': ('hpl', 'Menschliches Leistungsvermögen', '🧠', 12),
-}
+SUBJECTS = [  # Stichwort im PDF-Titel → id, Name, Icon, Fragen in der Prüfung (Angabe des Nutzers)
+    ('Luftrecht', 'alw', 'Luftrecht', '📜', 16),
+    ('Luftfahrzeugkunde', 'agk', 'Luftfahrzeugkunde', '🔧', 16),
+    ('Meteorologie', 'met', 'Meteorologie', '🌦️', 16),
+    ('Kommunikation', 'com', 'Kommunikation', '📻', 12),
+    ('Navigation', 'nav', 'Navigation', '🧭', 12),
+    ('Grundlagen des Flug', 'pfa', 'Aerodynamik', '🛩️', 12),
+    ('Betriebliche Verfahren', 'opr', 'Betriebliche Verfahren', '📋', 12),
+    ('Flugplanung', 'fpp', 'Flugplanung', '🗺️', 12),
+    ('Menschliches Leistungsverm', 'hpl', 'Menschliches Leistungsvermögen', '🧠', 12),
+]
 HEADER_RE = re.compile(r'^\d+ .*ECQB-PPL\(A\)$')
 FOOTER_RE = re.compile(r'^v\d{4}\.\d+ \d+$')
 POINTS_RE = re.compile(r'\s*\((\d+,\d{2}) P\.\)\s*$')
@@ -55,8 +55,10 @@ def parse_pdf(path, log):
         first = (pdf.pages[0].extract_text() or '')
         m = re.search(r'^(\d{2}) – ', first, re.M)
         code = m.group(1)
-        sid, name, icon, exam_n = SUBJECTS[code]
         title = re.sub(r'\s+', ' ', first[m.start():].split('\n(Auszug)')[0]).strip()
+        hit = [x for x in SUBJECTS if x[0] in title]
+        if len(hit) != 1: raise SystemExit(f'{path}: Fach nicht eindeutig erkannt aus Titel "{title}"')
+        _, sid, name, icon, exam_n = hit[0]
         version = re.search(r'(v\d{4}\.\d+)', pdf.pages[1].extract_text() or pdf.pages[2].extract_text() or '')
         version = version.group(1) if version else '?'
 
