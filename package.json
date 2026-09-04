@@ -1,0 +1,15 @@
+{
+  "name": "flugschule-pruefungstrainer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Prüfungsvorbereitung für Flugschul-Fragen – statische PWA mit verschlüsseltem Fragenkatalog",
+  "scripts": {
+    "validate": "node tools/validate.mjs",
+    "encrypt": "node tools/encrypt.mjs",
+    "decrypt": "node tools/decrypt.mjs",
+    "serve": "node tools/serve.mjs",
+    "test": "node tools/test.mjs"
+  },
+  "engines": { "node": ">=18" }
+}

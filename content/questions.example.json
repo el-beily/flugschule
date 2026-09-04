@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "title": "Flugschule Prüfungstrainer",
+    "subtitle": "Demo-Inhalte",
+    "version": "demo-1",
+    "source": "Platzhalter – wird durch die Fragen aus der offiziellen PDF ersetzt",
+    "demo": true,
+    "exam": { "questions": 10, "minutes": 15, "passPercent": 75 }
+  },
+  "topics": [
+    { "id": "demo-a", "name": "Demo-Thema A", "icon": "🅰️" },
+    { "id": "demo-b", "name": "Demo-Thema B", "icon": "🅱️" },
+    { "id": "demo-c", "name": "Demo-Thema C", "icon": "©️" }
+  ],
+  "questions": [
+    { "id": "demo-a-01", "topic": "demo-a", "q": "Demo-Frage 1 (Platzhalter): Welche Antwort ist hier als richtig markiert?", "a": ["Diese Antwort ist richtig", "Diese Antwort ist falsch", "Diese Antwort ist auch falsch", "Diese Antwort ist ebenfalls falsch"], "correct": 0, "explanation": "Platzhalter-Erklärung. Echte Erklärungen kommen aus der PDF.", "ref": "Demo" },
+    { "id": "demo-a-02", "topic": "demo-a", "q": "Demo-Frage 2 (Platzhalter): Welche Antwort ist hier als richtig markiert?", "a": ["Falsch", "Richtig", "Falsch", "Falsch"], "correct": 1, "explanation": "Platzhalter-Erklärung." },
+    { "id": "demo-a-03", "topic": "demo-a", "q": "Demo-Frage 3 (Platzhalter): Welche Antwort ist hier als richtig markiert?", "a": ["Falsch", "Falsch", "Richtig", "Falsch"], "correct": 2 },
+    { "id": "demo-a-04", "topic": "demo-a", "q": "Demo-Frage 4 (Platzhalter, Mehrfachauswahl): Welche zwei Antworten sind als richtig markiert?", "a": ["Richtig", "Falsch", "Richtig", "Falsch"], "correct": [0, 2], "explanation": "Bei Mehrfachauswahl müssen alle richtigen Antworten gewählt werden." },
+    { "id": "demo-b-01", "topic": "demo-b", "q": "Demo-Frage 5 (Platzhalter): Welche Antwort ist hier als richtig markiert?", "a": ["Falsch", "Falsch", "Falsch", "Richtig"], "correct": 3 },
+    { "id": "demo-b-02", "topic": "demo-b", "q": "Demo-Frage 6 (Platzhalter): Welche Antwort ist hier als richtig markiert?", "a": ["Richtig", "Falsch", "Falsch"], "correct": 0 },
+    { "id": "demo-b-03", "topic": "demo-b", "q": "Demo-Frage 7 (Platzhalter): Welche Antwort ist hier als richtig markiert?", "a": ["Falsch", "Richtig", "Falsch", "Falsch"], "correct": 1 },
+    { "id": "demo-b-04", "topic": "demo-b", "q": "Demo-Frage 8 (Platzhalter): Welche Antwort ist hier als richtig markiert?", "a": ["Falsch", "Falsch", "Richtig", "Falsch"], "correct": 2 },
+    { "id": "demo-c-01", "topic": "demo-c", "q": "Demo-Frage 9 (Platzhalter): Welche Antwort ist hier als richtig markiert?", "a": ["Falsch", "Falsch", "Falsch", "Richtig"], "correct": 3 },
+    { "id": "demo-c-02", "topic": "demo-c", "q": "Demo-Frage 10 (Platzhalter): Welche Antwort ist hier als richtig markiert?", "a": ["Richtig", "Falsch", "Falsch", "Falsch"], "correct": 0 },
+    { "id": "demo-c-03", "topic": "demo-c", "q": "Demo-Frage 11 (Platzhalter): Welche Antwort ist hier als richtig markiert?", "a": ["Falsch", "Richtig", "Falsch", "Falsch"], "correct": 1 },
+    { "id": "demo-c-04", "topic": "demo-c", "q": "Demo-Frage 12 (Platzhalter): Welche Antwort ist hier als richtig markiert?", "a": ["Falsch", "Falsch", "Richtig", "Falsch"], "correct": 2 }
+  ]
+}
