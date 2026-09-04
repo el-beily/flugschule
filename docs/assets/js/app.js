@@ -12,6 +12,7 @@ const App = {
     this.el.addEventListener('submit', e => this.onSubmit(e));
     this.el.addEventListener('change', e => this.onChange(e));
     window.addEventListener('popstate', e => this.onPop(e));
+    document.addEventListener('keydown', e => this.onKey(e));
     this.registerSW();
     if (!FSCrypto.available()) { this.show('error', { msg: 'Dein Browser unterstützt die nötige Verschlüsselung nicht (oder die Seite läuft nicht über HTTPS).' }, { replace: true }); return; }
     const stored = Store.get('key');
@@ -111,7 +112,7 @@ const App = {
     this.show('quiz');
   },
   current() { return this.session.items[this.session.i]; },
-  commit(item) {
+  commit(item, quiet) {
     const s = this.session, p = this.p;
     item.correct = Quiz.grade(item.q, item.picked);
     item.done = true;
@@ -121,14 +122,13 @@ const App = {
     const xp = Game.recordAnswer(p, item.q, item.correct, { combo: s.combo, mode: s.mode });
     item.xp = xp; s.xp += xp;
     const after = Game.levelFor(p.xp).level;
-    if (after > before) { s.levelUps++; this.onLevelUp(after); }
+    if (after > before) { s.levelUps++; if (!quiet) this.onLevelUp(after); }
     const dailyNow = Game.today(p).answered >= p.settings.dailyGoal;
-    if (dailyNow && !goalBefore) { U.toast('🎯 Tagesziel erreicht!', { kind: 'ok' }); }
+    if (dailyNow && !goalBefore && !quiet) { U.toast('🎯 Tagesziel erreicht!', { kind: 'ok' }); }
     const ctx = { combo: s.combo, hour: new Date().getHours(), dailyDone: dailyNow, topicMastered: Game.topicMastery(p, this.bank, item.q.topic).pct === 100, allRight: Game.allRight(p, this.bank) };
     const fresh = Game.checkBadges(p, ctx);
-    fresh.forEach(b => { s.badges.push(b.id); setTimeout(() => U.toast(`${b.icon} Neues Abzeichen: <b>${U.esc(b.name)}</b>`, { kind: 'badge', duration: 3500 }), 400); });
-    this.save();
-    U.vibrate(item.correct ? 30 : [60, 40, 60]);
+    fresh.forEach(b => { s.badges.push(b.id); if (!quiet) setTimeout(() => U.toast(`${b.icon} Neues Abzeichen: <b>${U.esc(b.name)}</b>`, { kind: 'badge', duration: 3500 }), 400); });
+    if (!quiet) { this.save(); U.vibrate(item.correct ? 30 : [60, 40, 60]); }
   },
   onLevelUp(level) {
     const rank = Game.rankFor(level);
@@ -137,6 +137,11 @@ const App = {
   next() {
     const s = this.session;
     if (s.i + 1 >= s.items.length) this.finish(); else { s.i++; this.render(); }
+  },
+  submitExam(reason) {
+    const s = this.session; if (!s || s.finished) return;
+    for (const item of s.items) if (!item.done && item.picked.length) this.commit(item, true);
+    this.finish(reason);
   },
   finish(reason) {
     const s = this.session;
@@ -173,12 +178,21 @@ const App = {
       const left = s.limitSec - (Date.now() - s.started) / 1000;
       const el = this.el.querySelector('[data-timer]');
       if (el) { el.textContent = U.fmtTime(left); el.classList.toggle('warn', left < 60); }
-      if (left <= 0) { U.toast('⏰ Zeit abgelaufen'); this.finish('time'); }
+      if (left <= 0) { U.toast('⏰ Zeit abgelaufen'); this.submitExam('time'); }
     };
     tick(); this.timer = setInterval(tick, 1000);
   },
   stopTimer() { if (this.timer) { clearInterval(this.timer); this.timer = null; } },
 
+  onKey(e) {
+    if (this.screen !== 'quiz' || !this.session || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return;
+    const k = e.key.toLowerCase();
+    const pos = 'abcdefgh'.indexOf(k) >= 0 ? 'abcdefgh'.indexOf(k) : (/^[1-8]$/.test(k) ? Number(k) - 1 : -1);
+    if (pos >= 0) { const btn = this.el.querySelectorAll('.answer')[pos]; if (btn && !btn.disabled) { btn.click(); e.preventDefault(); } return; }
+    if (k === 'enter' || k === ' ' || k === 'arrowright') { const btn = this.el.querySelector('[data-action=check]:not(:disabled), [data-action=next]:not(:disabled)'); if (btn) { btn.click(); e.preventDefault(); } }
+    if (k === 'arrowleft') { const btn = this.el.querySelector('[data-action=prev]:not(:disabled)'); if (btn) btn.click(); }
+  },
   // ---------- Events ----------
   onClick(e) {
     const el = e.target.closest('[data-action]');
@@ -200,14 +214,29 @@ const App = {
       const item = this.current(); if (item.done) return;
       const idx = Number(d.idx);
       if (Quiz.isMulti(item.q)) { item.picked = item.picked.includes(idx) ? item.picked.filter(i => i !== idx) : [...item.picked, idx]; this.render(); return; }
-      item.picked = [idx];
+      item.picked = item.picked[0] === idx && s.mode === 'exam' ? [] : [idx];
       if (s.mode === 'exam') { this.render(); return; }
       this.commit(item); this.render();
     },
-    check() { const item = this.current(); if (!item.done && item.picked.length) { this.commit(item); if (this.session.mode === 'exam') this.next(); else this.render(); } },
-    next() { const item = this.current(); if (!item.done) { if (!item.picked.length) return; this.commit(item); } this.next(); },
+    check() { const item = this.current(); if (!item.done && item.picked.length) { this.commit(item); this.render(); } },
+    next() {
+      const s = this.session; if (!s) return;
+      const item = this.current();
+      if (s.mode === 'exam') { if (s.i + 1 >= s.items.length) { this.args = { overview: true }; this.render(); } else { s.i++; this.render(); } return; }
+      if (!item.done) { if (!item.picked.length) return; this.commit(item); }
+      this.next();
+    },
+    prev() { const s = this.session; if (s && s.i > 0) { s.i--; this.args = {}; this.render(); } },
+    goto(d) { const s = this.session; if (s) { s.i = Math.max(0, Math.min(s.items.length - 1, Number(d.i))); this.args = {}; this.render(); } },
+    flag() { const item = this.current(); item.flagged = !item.flagged; this.render(); },
+    overview() { this.args = { overview: !this.args.overview }; this.render(); },
     quit() { this.quit(); },
-    'finish-exam'() { if (confirm('Prüfung jetzt abgeben? Unbeantwortete Fragen zählen als falsch.')) this.finish('manual'); },
+    'finish-exam'() {
+      const s = this.session; if (!s) return;
+      const open = s.items.filter(it => !it.picked.length).length;
+      if (!confirm(open ? `Prüfung abgeben? ${open} ${open === 1 ? 'Frage ist' : 'Fragen sind'} noch unbeantwortet und ${open === 1 ? 'zählt' : 'zählen'} als falsch.` : 'Prüfung jetzt abgeben?')) return;
+      this.submitExam('manual');
+    },
     'retry-wrong'() { const s = this.lastSession; if (s) this.startFromQuestions('review', s.items.filter(it => !it.correct).map(it => it.q)); },
     'retry-same'() { const s = this.lastSession; if (s) { if (s.mode === 'exam') this.show('exam', { topic: s.topic }); else this.startFromQuestions(s.mode, s.items.map(it => it.q)); } },
     async share() {
@@ -428,10 +457,12 @@ const App = {
         ${last.length ? `<div class="card"><b>Letzte Prüfungen</b><div class="list plain">${last.map(e => `<div class="row"><span class="ic">${e.passed ? '✅' : '❌'}</span><span class="grow"><b>${e.pct} %</b> · ${e.right}/${e.total} richtig<br><small class="muted">${U.fmtDate(e.at)} · ${U.esc(this.topicName(e.topic))}</small></span></div>`).join('')}</div></div>` : ''}
       </div>`;
     },
-    quiz() {
+    quiz({ overview } = {}) {
       const s = this.session; if (!s) return this.views.home.call(this);
+      const isExam = s.mode === 'exam';
+      if (isExam && overview) return this.views.examOverview.call(this);
       const item = this.current(), q = item.q, multi = Quiz.isMulti(q), correct = Quiz.correctSet(q);
-      const isExam = s.mode === 'exam', last = s.i + 1 >= s.items.length;
+      const last = s.i + 1 >= s.items.length;
       const letters = 'ABCDEFGH';
       const answers = item.order.map((idx, pos) => {
         let cls = 'answer';
@@ -442,7 +473,12 @@ const App = {
       }).join('');
       let footer = '';
       if (isExam) {
-        footer = `<div class="row gap"><button type="button" class="btn ghost" data-action="finish-exam">Abgeben</button><button type="button" class="btn primary grow" data-action="next" ${item.picked.length ? '' : 'disabled'}>${last ? 'Abgeben & auswerten' : 'Weiter ›'}</button></div>`;
+        footer = `<div class="row gap exam-nav">
+          <button type="button" class="btn" data-action="prev" ${s.i === 0 ? 'disabled' : ''} aria-label="Zurück">‹</button>
+          <button type="button" class="btn ${item.flagged ? 'flagged' : ''}" data-action="flag" aria-label="Markieren">${item.flagged ? '🚩' : '⚑'}</button>
+          <button type="button" class="btn" data-action="overview" aria-label="Übersicht">▦</button>
+          <button type="button" class="btn primary grow" data-action="next">${last ? 'Zur Übersicht' : (item.picked.length ? 'Weiter ›' : 'Überspringen ›')}</button>
+        </div>`;
       } else if (item.done) {
         footer = `<div class="feedback ${item.correct ? 'ok' : 'bad'}">
           <b>${item.correct ? `Richtig! +${item.xp} XP${s.combo >= 3 ? ` · 🔥 ${s.combo}er-Serie` : ''}` : 'Leider falsch.'}</b>
@@ -455,7 +491,7 @@ const App = {
       return `<div class="screen quiz">
         <header class="quizbar">
           <button type="button" class="icon" data-action="quit" aria-label="Abbrechen">✕</button>
-          <div class="progress grow"><div style="width:${U.pct(s.i + (item.done ? 1 : 0), s.items.length)}%"></div></div>
+          <div class="progress grow"><div style="width:${U.pct(isExam ? s.items.filter(it => it.picked.length).length : s.i + (item.done ? 1 : 0), s.items.length)}%"></div></div>
           <span class="counter">${s.i + 1}/${s.items.length}</span>
           ${s.limitSec ? `<span class="timer" data-timer>${U.fmtTime(s.limitSec - (Date.now() - s.started) / 1000)}</span>` : (s.combo >= 3 ? `<span class="combo">🔥${s.combo}</span>` : '')}
         </header>
@@ -465,6 +501,26 @@ const App = {
           ${q.image ? `<img class="qimg" src="${U.esc(q.image)}" alt="Abbildung zur Frage">` : ''}
           <div class="answers">${answers}</div>
           ${footer}
+        </div>
+      </div>`;
+    },
+    examOverview() {
+      const s = this.session;
+      const answered = s.items.filter(it => it.picked.length).length, flagged = s.items.filter(it => it.flagged).length;
+      return `<div class="screen quiz">
+        <header class="quizbar">
+          <button type="button" class="icon" data-action="quit" aria-label="Abbrechen">✕</button>
+          <div class="grow"><b>Übersicht</b></div>
+          ${s.limitSec ? `<span class="timer" data-timer>${U.fmtTime(s.limitSec - (Date.now() - s.started) / 1000)}</span>` : ''}
+        </header>
+        <div class="card">
+          <p><b>${answered}/${s.items.length}</b> beantwortet${flagged ? ` · 🚩 ${flagged} markiert` : ''}${answered < s.items.length ? ` · <span class="warn-txt">${s.items.length - answered} offen</span>` : ''}</p>
+          <div class="qgrid">${s.items.map((it, i) => `<button type="button" class="qcell ${it.picked.length ? 'answered' : ''} ${it.flagged ? 'flagged' : ''} ${i === s.i ? 'current' : ''}" data-action="goto" data-i="${i}">${i + 1}${it.flagged ? '<span class="fl">🚩</span>' : ''}</button>`).join('')}</div>
+          <p class="muted small">Tippe eine Nummer, um zur Frage zu springen. Antworten kannst du bis zur Abgabe ändern.</p>
+        </div>
+        <div class="stack">
+          <button type="button" class="btn primary big" data-action="finish-exam">Prüfung abgeben ✅</button>
+          <button type="button" class="btn big" data-action="overview">Zurück zur Frage ${s.i + 1}</button>
         </div>
       </div>`;
     },

@@ -71,11 +71,25 @@ try {
   await page.click('form[data-form=exam] button[type=submit]');
   await page.waitForSelector('.screen-quiz .timer');
   for (let i = 0; i < 10; i++) {
+    if (i === 3) { await page.click('[data-action=flag]'); await page.click('[data-action=next]'); continue; } // Frage 4 überspringen + markieren
     await page.click('.answer:not(:disabled)');
-    await page.click('[data-action=next]:not(:disabled)');
+    if (i === 5) { await page.click('[data-action=prev]'); await page.click('[data-action=next]'); } // zurück und wieder vor
+    await page.click('[data-action=next]');
   }
+  await page.waitForSelector('.qgrid');
+  await shot('exam-overview');
+  assert(await page.evaluate(() => document.querySelectorAll('.qcell.answered').length === 9), '9 Fragen in Übersicht beantwortet');
+  assert(await page.evaluate(() => document.querySelectorAll('.qcell.flagged').length === 1), '1 Frage markiert');
+  await page.click('.qcell:not(.answered)');
+  await page.waitForSelector('.exam-nav');
+  await page.click('.answer:not(:disabled)');
+  await page.click('[data-action=overview]');
+  await page.waitForSelector('.qgrid');
+  assert(await page.evaluate(() => document.querySelectorAll('.qcell.answered').length === 10), 'alle 10 beantwortet');
+  await page.click('[data-action=finish-exam]');
   await page.waitForSelector('.screen-result');
-  assert(await page.evaluate(() => App.p.exams.length === 1), 'Prüfung gespeichert');
+  assert(await page.evaluate(() => App.p.exams.length === 1 && App.p.exams[0].total === 10), 'Prüfung gespeichert');
+  assert(await page.evaluate(() => App.p.answered === 20), 'Prüfungsantworten verbucht');
   await shot('exam-result');
 
   // Statistik + Profil

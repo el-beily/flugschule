@@ -195,3 +195,14 @@ label.file input { display: none; }
 #toast.kind-badge { background: linear-gradient(135deg, var(--accent), #ff6b35); color: #fff; }
 .toast-btn { background: rgba(255, 255, 255, .2); border: 0; color: inherit; padding: .3rem .7rem; border-radius: 8px; font-weight: 700; cursor: pointer; }
 #confetti { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 40; }
+
+/* Prüfungsnavigation + Übersicht */
+.exam-nav .btn { padding: .8rem .9rem; font-size: 1.1rem; }
+.exam-nav .btn.flagged { border-color: var(--accent); background: rgba(255, 159, 28, .15); }
+.qgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); gap: .5rem; margin: .8rem 0; }
+.qcell { position: relative; aspect-ratio: 1; border: 2px solid var(--line); border-radius: 12px; background: var(--card); font-weight: 700; cursor: pointer; }
+.qcell.answered { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); }
+.qcell.flagged { border-color: var(--accent); }
+.qcell.current { box-shadow: 0 0 0 3px var(--accent); }
+.qcell .fl { position: absolute; top: -6px; right: -6px; font-size: .7rem; }
+.warn-txt { color: var(--bad); font-weight: 600; }
