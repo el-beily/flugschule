@@ -6,6 +6,7 @@
   "description": "Prüfungsvorbereitung für Flugschul-Fragen – statische PWA mit verschlüsseltem Fragenkatalog",
   "scripts": {
     "validate": "node tools/validate.mjs",
+    "md2json": "node tools/md2json.mjs",
     "encrypt": "node tools/encrypt.mjs",
     "decrypt": "node tools/decrypt.mjs",
     "serve": "node tools/serve.mjs",

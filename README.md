@@ -43,9 +43,26 @@ ausgeschlossen** – bitte separat sicher aufbewahren. Das Format zeigt
 }
 ```
 
+Einfacher zu schreiben ist das Textformat `content/questions.md` (Beispiel:
+`content/questions.example.md`), das `npm run md2json` in JSON umwandelt:
+
+```
+# nav | Navigation | 🧭          ← Thema: id | Name | Icon
+## Fragetext                     ← Frage
+- falsche Antwort
+* richtige Antwort               ← Stern = richtig (mehrere Sterne = Mehrfachauswahl)
+- falsche Antwort
+> Erklärung (optional)
+@ Quelle, z. B. Seite 12 (optional)
+```
+
+Text aus einer PDF holen: `python3 tools/pdf-extract.py content/fragen.pdf`
+(schreibt `content/fragen.txt` mit Seitenmarkern; braucht `pip install pdfplumber pypdf`).
+
 Befehle (Node ≥ 18, keine Abhängigkeiten nötig):
 
 ```bash
+npm run md2json                                    # content/questions.md → content/questions.json
 npm run validate                                   # Katalog prüfen
 FLUGSCHULE_PASSWORD='…' npm run encrypt            # → docs/data/questions.enc.json (committen!)
 FLUGSCHULE_PASSWORD='…' npm run decrypt -- docs/data/questions.enc.json content/questions.json   # Klartext zurückholen

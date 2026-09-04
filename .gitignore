@@ -1,5 +1,7 @@
 # Klartext-Fragenkatalog niemals committen (öffentliches Repo!)
 content/questions.json
+content/questions.md
+content/*.txt
 content/*.pdf
 node_modules/
 .DS_Store
