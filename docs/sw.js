@@ -1,5 +1,5 @@
 // Service Worker: App-Shell offline verfügbar, Fragenkatalog network-first.
-const CACHE = 'flugschule-v1';
+const CACHE = 'flugschule-v2';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'assets/css/app.css', 'assets/js/util.js', 'assets/js/crypto.js', 'assets/js/store.js', 'assets/js/game.js', 'assets/js/quiz.js', 'assets/js/app.js', 'assets/icon.svg', 'assets/icon-192.png', 'assets/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -11,9 +11,9 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
-  if (req.url.includes('/data/')) {
-    // Fragenkatalog: erst Netz, sonst Cache
-    e.respondWith(fetch(req).then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); return res; }).catch(() => caches.match(req)));
+  if (req.url.includes('/data/version.json') || req.cache === 'reload' || req.cache === 'no-store') {
+    // Versionsstempel bzw. erzwungene Aktualisierung: immer Netz, Ergebnis in den Cache
+    e.respondWith(fetch(req).then(res => { if (res.ok) caches.open(CACHE).then(c => c.put(req, res.clone())); return res; }).catch(() => caches.match(req)));
     return;
   }
   // App-Shell: Cache sofort, im Hintergrund aktualisieren

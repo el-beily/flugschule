@@ -35,4 +35,5 @@ const payload = {
 };
 await mkdir(dirname(outFile), { recursive: true });
 await writeFile(outFile, JSON.stringify(payload));
+await writeFile(outFile.replace(/[^/]+$/, 'version.json'), JSON.stringify({ builtAt: payload.builtAt, bankVersion: payload.bankVersion, questions: stats.questions }));
 console.log(`✔ ${stats.questions} Fragen verschlüsselt → ${outFile} (${(ct.length / 1024).toFixed(1)} KB)`);

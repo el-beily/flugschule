@@ -81,6 +81,7 @@ const App = {
 
   // ---------- Profile ----------
   afterUnlock() {
+    this.checkForUpdate();
     const cur = Store.get('current');
     const prof = Store.profiles().find(p => p.id === cur);
     if (prof) this.login(prof, true); else this.show('login', {}, { replace: true });
@@ -94,7 +95,23 @@ const App = {
   save() { if (this.profile && this.p) Store.saveProgress(this.profile.id, this.p); },
   topicName(id) { const t = this.bank.topics.find(t => t.id === id); return t ? t.name : (id === 'all' ? 'Alle Themen' : id); },
   topicIcon(id) { const t = this.bank.topics.find(t => t.id === id); return t?.icon || '📘'; },
-  examMeta() { return Object.assign({ questions: 20, minutes: 30, passPercent: 75 }, this.bank.meta?.exam || {}); },
+  examMeta() {
+    const m = Object.assign({ passPercent: 75 }, this.bank.meta?.exam || {});
+    if (!m.questions) m.questions = this.bank.topics.reduce((s, t) => s + (t.examQuestions || 0), 0) || 20;
+    if (!m.minutes) m.minutes = Math.round(m.questions * 1.5); // Annahme: 1,5 Min je Frage, im Setup änderbar
+    return m;
+  },
+  imgSrc(q) { if (!q.image) return ''; return q.image.startsWith('img:') ? (this.bank.images?.[q.image.slice(4)] || '') : q.image; },
+  imgTag(q, cls = 'qimg') { const src = this.imgSrc(q); return src ? `<img class="${cls}" src="${U.esc(src)}" alt="Abbildung zur Frage" data-action="zoom">` : ''; },
+  async checkForUpdate() {
+    try {
+      const v = await (await fetch('data/version.json', { cache: 'no-store' })).json();
+      if (v.builtAt && this.payload && v.builtAt !== this.payload.builtAt) {
+        await fetch('data/questions.enc.json', { cache: 'reload' });
+        U.toast('Neuer Fragenkatalog verfügbar', { action: 'Neu laden', onAction: () => location.reload(), duration: 10000 });
+      }
+    } catch (e) { /* offline */ }
+  },
 
   // ---------- Session ----------
   start(mode, topic, n, opts = {}) {
@@ -250,6 +267,12 @@ const App = {
       if (navigator.share) { try { await navigator.share({ title: 'Flugschule Prüfungstrainer', text, url }); return; } catch (e) { /* abgebrochen */ } }
       U.toast((await U.copy(text + ' ' + url)) ? 'In die Zwischenablage kopiert' : 'Teilen nicht möglich');
     },
+    zoom(d, el) {
+      const ov = document.createElement('div'); ov.className = 'lightbox';
+      ov.innerHTML = `<img src="${U.esc(el.src)}" alt=""><button type="button" class="lb-close" aria-label="Schließen">✕</button>`;
+      ov.addEventListener('click', () => ov.remove());
+      document.body.appendChild(ov);
+    },
     toggle(d, el) { const t = this.el.querySelector(d.target); if (t) { t.hidden = !t.hidden; el.classList.toggle('open', !t.hidden); } },
     export() {
       const data = { type: 'flugschule-progress', v: 1, exportedAt: new Date().toISOString(), profile: { name: this.profile.name, email: this.profile.email }, progress: this.p };
@@ -396,7 +419,7 @@ const App = {
           <span class="ic">📝</span><span class="grow"><b>Prüfungssimulation</b><small>${this.examMeta().questions} Fragen · ${this.examMeta().minutes} Min · ab ${this.examMeta().passPercent} % bestanden</small></span><span class="chev">›</span>
         </button>
         ${this.views.recentBadges.call(this)}
-        <p class="muted small center">${U.esc(b.meta?.title || '')}${b.meta?.version ? ` · Katalog ${U.esc(b.meta.version)}` : ''}</p>
+        <p class="muted small center">${U.esc(b.meta?.title || '')}${b.meta?.subtitle ? ` · ${U.esc(b.meta.subtitle)}` : ''}${b.meta?.version ? ` · ${U.esc(b.meta.version)}` : ''}</p>
       </div>`;
     },
     recentBadges() {
@@ -424,7 +447,7 @@ const App = {
           ${U.ring(m.pct, 120, 12)}<div class="ring-label"><b>${m.pct} %</b><small>gemeistert</small></div>
           <div class="statrow"><div><b>${m.total}</b><small>Fragen</small></div><div><b>${m.seen}</b><small>gesehen</small></div><div><b>${m.accuracy} %</b><small>Trefferquote</small></div></div>
         </div>
-        ${t.description ? `<div class="card"><p>${U.esc(t.description)}</p></div>` : ''}
+        ${t.description || t.examQuestions || t.source ? `<div class="card small muted">${t.description ? `<p>${U.esc(t.description)}</p>` : ''}${t.examQuestions ? `<p>In der Prüfung: ${t.examQuestions} Fragen aus diesem Fach.</p>` : ''}${t.source ? `<p>Quelle: ${U.esc(t.source)}</p>` : ''}</div>` : ''}
         <div class="stack">
           ${sizes.map(n => `<button type="button" class="btn primary big" data-action="start-learn" data-topic="${U.esc(id)}" data-n="${n}">${n} Fragen lernen</button>`).join('')}
           <button type="button" class="btn ${sizes.length ? '' : 'primary'} big" data-action="start-learn" data-topic="${U.esc(id)}" data-n="${m.total}">Alle ${m.total} Fragen lernen</button>
@@ -437,20 +460,22 @@ const App = {
       const meta = this.examMeta();
       const pool = Quiz.pool(this.bank, topic).length;
       const perQ = meta.minutes / meta.questions;
-      const counts = [...new Set([10, 20, meta.questions, 30, 40, 60, pool])].filter(x => x <= pool).sort((a, b) => a - b);
-      const selN = n && counts.includes(Number(n)) ? Number(n) : (counts.includes(meta.questions) ? meta.questions : counts[counts.length - 1]);
+      const t = this.bank.topics.find(x => x.id === topic);
+      const examN = (t && t.examQuestions) || meta.questions;
+      const counts = [...new Set([10, examN, 20, 30, 40, 60, 100, pool])].filter(x => x <= pool).sort((a, b) => a - b);
+      const selN = n && counts.includes(Number(n)) ? Number(n) : (counts.includes(examN) ? examN : counts[counts.length - 1]);
       const suggested = Math.max(1, Math.round(selN * perQ));
       const times = [...new Set([0, suggested, Math.round(suggested * 1.5), Math.round(suggested * 0.75)])].sort((a, b) => a - b);
       const selMin = minutes != null && times.includes(Number(minutes)) ? Number(minutes) : suggested;
       const last = this.p.exams.slice(-3).reverse();
       return `<div class="screen">
-        <header class="top"><h1>Prüfungssimulation</h1><p class="muted">Wie in der echten Prüfung: keine Hilfe, Auswertung am Ende. Bestanden ab ${meta.passPercent} %.</p></header>
+        <header class="top"><h1>Prüfungssimulation</h1><p class="muted">Wie in der echten Prüfung: keine Hilfe, Auswertung am Ende. Bestanden ab ${meta.passPercent} %${this.bank.topics.some(x => x.examQuestions) ? '. Bei „Alle Themen“ werden die Fragen wie in der Prüfung auf die Fächer verteilt' : ''}.</p></header>
         <form class="card" data-form="exam">
           <label>Themenbereich<select name="topic" data-exam-topic>
             <option value="all" ${topic === 'all' ? 'selected' : ''}>Alle Themen (${this.bank.questions.length} Fragen)</option>
             ${this.bank.topics.map(t => `<option value="${U.esc(t.id)}" ${t.id === topic ? 'selected' : ''}>${U.esc(t.name)} (${Quiz.pool(this.bank, t.id).length})</option>`).join('')}
           </select></label>
-          <label>Anzahl Fragen<select name="n">${counts.map(c => `<option value="${c}" ${c === selN ? 'selected' : ''}>${c}${c === meta.questions ? ' (wie Prüfung)' : ''}</option>`).join('')}</select></label>
+          <label>Anzahl Fragen<select name="n">${counts.map(c => `<option value="${c}" ${c === selN ? 'selected' : ''}>${c}${c === examN ? ' (wie in der Prüfung)' : ''}</option>`).join('')}</select></label>
           <label>Zeitlimit<select name="minutes">${times.map(m => `<option value="${m}" ${m === selMin ? 'selected' : ''}>${m ? m + ' Minuten' : 'Ohne Zeitlimit'}${m === suggested ? ' (empfohlen)' : ''}</option>`).join('')}</select></label>
           <button class="btn primary big" type="submit">Prüfung starten 📝</button>
         </form>
@@ -498,7 +523,7 @@ const App = {
         <div class="card q">
           <div class="chips"><span class="chip">${this.topicIcon(q.topic)} ${U.esc(this.topicName(q.topic))}</span>${multi ? '<span class="chip alt">Mehrfachauswahl</span>' : ''}${isExam ? '<span class="chip alt">Prüfung</span>' : ''}</div>
           <p class="qtext">${U.esc(q.q)}</p>
-          ${q.image ? `<img class="qimg" src="${U.esc(q.image)}" alt="Abbildung zur Frage">` : ''}
+          ${this.imgTag(q)}
           <div class="answers">${answers}</div>
           ${footer}
         </div>
@@ -535,7 +560,7 @@ const App = {
         <div class="card center result ${isExam ? (passed ? 'pass' : 'fail') : ''}">
           ${U.ring(sum.pct, 140, 14, isExam && !passed ? 'bad' : 'good')}<div class="ring-label big"><b>${sum.pct} %</b></div>
           <h1>${title}</h1>
-          <p class="muted">${sum.right} von ${sum.total} richtig${sum.unanswered.length ? ` · ${sum.unanswered.length} unbeantwortet` : ''} · ${U.fmtTime(sum.secs)} Min${reason === 'time' ? ' · Zeit abgelaufen' : ''}</p>
+          <p class="muted">${sum.right} von ${sum.total} richtig${sum.byPoints ? ` (${sum.ptsRight} von ${sum.ptsTotal} Punkten)` : ''}${sum.unanswered.length ? ` · ${sum.unanswered.length} unbeantwortet` : ''} · ${U.fmtTime(sum.secs)} Min${reason === 'time' ? ' · Zeit abgelaufen' : ''}</p>
           ${isExam ? `<p class="muted small">Bestehensgrenze ${s.passPercent} %${passed ? ' · +50 XP Bonus' : ''}</p>` : ''}
           <div class="statrow"><div><b>+${s.xp}</b><small>XP</small></div><div><b>🔥 ${s.maxCombo}</b><small>beste Serie</small></div><div><b>${Game.streakAlive(this.p)}</b><small>Tage Streak</small></div></div>
           ${s.levelUps ? `<p class="lvl">⬆️ Level ${Game.levelFor(this.p.xp).level} erreicht!</p>` : ''}
@@ -550,6 +575,7 @@ const App = {
           <div class="card review">
             <div class="chips"><span class="chip">${U.esc(this.topicName(it.q.topic))}</span></div>
             <p class="qtext">${U.esc(it.q.q)}</p>
+            ${this.imgTag(it.q, 'qimg small')}
             ${it.picked.length ? `<p class="ans bad">✗ Deine Antwort: ${it.picked.map(i => U.esc(it.q.a[i])).join(' / ')}</p>` : '<p class="ans bad">✗ Nicht beantwortet</p>'}
             <p class="ans good">✓ Richtig: ${[...c].map(i => U.esc(it.q.a[i])).join(' / ')}</p>
             ${it.q.explanation ? `<p class="muted small">${U.esc(it.q.explanation)}</p>` : ''}

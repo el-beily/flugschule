@@ -25,7 +25,25 @@ Alternativ geht auch *Source: „Deploy from a branch“ → `main` / `/docs`*.
 
 Die App liegt dann unter `https://<user>.github.io/<repo>/`.
 
-## Fragenkatalog pflegen
+## Fragenkatalog aus den ECQB-PPL-PDFs erzeugen
+
+Die offiziellen ECQB-PPL(A)-Kataloge (PDF, aircademy-Layout) werden vollautomatisch übernommen –
+inklusive Lösungen (im PDF per angekreuztem Kästchen markiert) und Anlagen-Bildern:
+
+```bash
+pip install pdfplumber pypdf                       # einmalig
+python3 tools/ecqb-parse.py content/pdf/*.pdf      # → content/questions.json (streng: bricht bei jeder Unklarheit ab)
+python3 tools/ecqb-verify.py content/pdf/*.pdf     # unabhängige Gegenprüfung mit zweitem PDF-Extraktor
+node tools/json2md.mjs                             # lesbare Textfassung content/questions.md zum Gegenlesen
+FLUGSCHULE_PASSWORD='…' npm run encrypt            # verschlüsseln → docs/data/questions.enc.json
+```
+
+Die PDFs, der Klartext-Katalog und die Textfassung liegen unter `content/` und sind per
+`.gitignore` vom Repo ausgeschlossen. Weitere Fächer (Luftfahrzeugkunde, Navigation,
+Betriebliche Verfahren, Menschliches Leistungsvermögen) sind im Parser bereits vorbereitet:
+einfach die PDFs dazulegen und die drei Befehle erneut ausführen.
+
+## Fragenkatalog manuell pflegen
 
 Der Klartext-Katalog `content/questions.json` ist per `.gitignore` **vom Repo
 ausgeschlossen** – bitte separat sicher aufbewahren. Das Format zeigt

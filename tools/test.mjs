@@ -67,10 +67,12 @@ try {
   await page.click('[data-action=nav][data-screen=exam]');
   await page.waitForSelector('form[data-form=exam]');
   await shot('exam-setup');
+  await page.selectOption('select[name=n]', { index: 0 });
   await page.selectOption('select[name=minutes]', { index: 1 });
+  const examN = Number(await page.$eval('select[name=n]', el => el.value));
   await page.click('form[data-form=exam] button[type=submit]');
   await page.waitForSelector('.screen-quiz .timer');
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < examN; i++) {
     if (i === 3) { await page.click('[data-action=flag]'); await page.click('[data-action=next]'); continue; } // Frage 4 überspringen + markieren
     await page.click('.answer:not(:disabled)');
     if (i === 5) { await page.click('[data-action=prev]'); await page.click('[data-action=next]'); } // zurück und wieder vor
@@ -78,18 +80,18 @@ try {
   }
   await page.waitForSelector('.qgrid');
   await shot('exam-overview');
-  assert(await page.evaluate(() => document.querySelectorAll('.qcell.answered').length === 9), '9 Fragen in Übersicht beantwortet');
+  assert(await page.evaluate(n => document.querySelectorAll('.qcell.answered').length === n - 1, examN), 'n-1 Fragen in Übersicht beantwortet');
   assert(await page.evaluate(() => document.querySelectorAll('.qcell.flagged').length === 1), '1 Frage markiert');
   await page.click('.qcell:not(.answered)');
   await page.waitForSelector('.exam-nav');
   await page.click('.answer:not(:disabled)');
   await page.click('[data-action=overview]');
   await page.waitForSelector('.qgrid');
-  assert(await page.evaluate(() => document.querySelectorAll('.qcell.answered').length === 10), 'alle 10 beantwortet');
+  assert(await page.evaluate(n => document.querySelectorAll('.qcell.answered').length === n, examN), 'alle beantwortet');
   await page.click('[data-action=finish-exam]');
   await page.waitForSelector('.screen-result');
-  assert(await page.evaluate(() => App.p.exams.length === 1 && App.p.exams[0].total === 10), 'Prüfung gespeichert');
-  assert(await page.evaluate(() => App.p.answered === 20), 'Prüfungsantworten verbucht');
+  assert(await page.evaluate(n => App.p.exams.length === 1 && App.p.exams[0].total === n, examN), 'Prüfung gespeichert');
+  assert(await page.evaluate(n => App.p.answered === 10 + n, examN), 'Prüfungsantworten verbucht');
   await shot('exam-result');
 
   // Statistik + Profil
@@ -112,7 +114,7 @@ try {
   // Reload: gespeicherter Schlüssel + Profil → direkt Home
   await page.reload();
   await page.waitForSelector('.screen-home', { timeout: 10000 });
-  assert(await page.evaluate(() => App.p.answered === 20), 'Fortschritt nach Reload erhalten');
+  assert(await page.evaluate(n => App.p.answered === 10 + n, examN), 'Fortschritt nach Reload erhalten');
 
   // Sperren → Lock-Screen
   await page.click('[data-action=nav][data-screen=profile]');

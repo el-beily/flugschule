@@ -27,7 +27,18 @@ const Quiz = {
     pool.sort((a, b) => (p.q[a.id].box - p.q[b.id].box) || (p.q[b.id].wrong - p.q[a.id].wrong));
     return U.shuffle(pool.slice(0, n));
   },
-  pickExam(bank, p, topic, n) { return U.shuffle(this.pool(bank, topic)).slice(0, n); },
+  // Prüfung: bei „Alle Themen“ Fragen anteilig nach den Prüfungsquoten der Fächer ziehen
+  pickExam(bank, p, topic, n) {
+    if (topic && topic !== 'all') return U.shuffle(this.pool(bank, topic)).slice(0, n);
+    const quotas = bank.topics.map(t => ({ id: t.id, w: t.examQuestions || this.pool(bank, t.id).length, pool: U.shuffle(this.pool(bank, t.id)) }));
+    const wsum = quotas.reduce((s, q) => s + q.w, 0);
+    let out = [];
+    quotas.forEach(q => { q.take = Math.min(q.pool.length, Math.floor(n * q.w / wsum)); });
+    let rest = n - quotas.reduce((s, q) => s + q.take, 0);
+    for (const q of [...quotas].sort((a, b) => (n * b.w / wsum) % 1 - (n * a.w / wsum) % 1)) { if (rest <= 0) break; if (q.take < q.pool.length) { q.take++; rest--; } }
+    quotas.forEach(q => { out = out.concat(q.pool.slice(0, q.take)); });
+    return U.shuffle(out);
+  },
   create(mode, questions, opts = {}) {
     return {
       mode, topic: opts.topic || 'all', limitSec: opts.limitSec || 0, passPercent: opts.passPercent || 75,
@@ -38,8 +49,12 @@ const Quiz = {
   correctSet(q) { return new Set(Array.isArray(q.correct) ? q.correct : [q.correct]); },
   isMulti(q) { return Array.isArray(q.correct) && q.correct.length > 1; },
   grade(q, picked) { const c = this.correctSet(q); return picked.length === c.size && picked.every(i => c.has(i)); },
+  points(q) { return Number(q.points) || 1; },
   summary(s) {
     const total = s.items.length, right = s.items.filter(it => it.correct === true).length;
-    return { total, right, pct: U.pct(right, total), wrong: s.items.filter(it => it.done && !it.correct), unanswered: s.items.filter(it => !it.done), secs: Math.round(((s.ended || Date.now()) - s.started) / 1000) };
+    const ptsTotal = s.items.reduce((a, it) => a + this.points(it.q), 0);
+    const ptsRight = s.items.reduce((a, it) => a + (it.correct === true ? this.points(it.q) : 0), 0);
+    const byPoints = s.mode === 'exam' && ptsTotal !== total;
+    return { total, right, ptsTotal, ptsRight, byPoints, pct: byPoints ? U.pct(ptsRight, ptsTotal) : U.pct(right, total), wrong: s.items.filter(it => it.done && !it.correct), unanswered: s.items.filter(it => !it.done), secs: Math.round(((s.ended || Date.now()) - s.started) / 1000) };
   }
 };
