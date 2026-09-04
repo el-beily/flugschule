@@ -63,12 +63,15 @@ def parse_pdf(path, log):
         version = version.group(1) if version else '?'
 
         # 1) Textzeilen aller Fragen-Seiten einsammeln (bis "Anlagen zu den Aufgaben")
-        lines, annex_pages = [], {}
+        lines, annex_pages, cur_annex = [], {}, None
         for pno, pg in enumerate(pdf.pages, 1):
             pl = page_lines(pg)
             if pl and pl[0].startswith('Anlagen zu den Aufgaben'):
-                n = int(re.search(r'Anlage (\d+)', pl[1]).group(1))
-                annex_pages[n] = pg
+                # Eine Anlage kann sich über mehrere Seiten erstrecken (Titelseite, Bildseite, Leerseite)
+                m = re.search(r'^Anlage (\d+)$', pl[1]) if len(pl) > 1 else None
+                if m: cur_annex = int(m.group(1)); annex_pages[cur_annex] = []
+                if cur_annex is None: raise SystemExit(f'{path} S.{pno}: Anlagenseite ohne Nummer')
+                annex_pages[cur_annex] += [(pg, im) for im in pg.images]
                 continue
             if pno <= 2: continue   # Titel + Impressum
             for l in pl:
@@ -116,13 +119,17 @@ def parse_pdf(path, log):
 
         # 3) Anlagen als Bilder
         images = {}
-        for n, pg in annex_pages.items():
-            if len(pg.images) != 1: raise SystemExit(f'Anlage {n}: {len(pg.images)} Bilder')
-            im = pg.images[0]
+        for n, ims in annex_pages.items():
+            if len(ims) != 1: raise SystemExit(f'Anlage {n}: {len(ims)} Bilder')
+            pg, im = ims[0]
             bbox = (max(0, im['x0'] - 2), im['top'] + 0.5, min(pg.width, im['x1'] + 2), min(pg.height, im['bottom'] + 2))
-            res = 300 if im['width'] < 220 else 150   # kleine Symbolbilder schärfer
+            native_w = (im.get('srcsize') or (0, 0))[0]
+            if im['width'] < 220: res = 300                                   # kleine Symbolbilder schärfer
+            elif im['width'] > 450 and native_w: res = int(min(200, max(150, native_w / (im['width'] / 72))))  # Karten/Diagramme in nativer Auflösung
+            else: res = 150
             pil = pg.crop(bbox).to_image(resolution=res).original.convert('RGB')
-            buf = io.BytesIO(); pil.save(buf, format='JPEG', quality=82, optimize=True)
+            buf = io.BytesIO(); pil.save(buf, format='JPEG', quality=85 if res > 150 else 82, optimize=True)
+            log.append(f'{sid} Anlage {n}: {pil.width}×{pil.height}px, {buf.tell() // 1024} KB')
             images[n] = 'data:image/jpeg;base64,' + base64.b64encode(buf.getvalue()).decode()
         used = {q['annex'] for q in questions if 'annex' in q}
         unused = set(annex_pages) - used

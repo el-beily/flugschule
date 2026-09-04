@@ -226,6 +226,7 @@ const App = {
     'start-review'(d) { this.start('review', d.topic || 'all', Number(d.n) || 15); },
     'open-topic'(d) { this.show('topic', { id: d.id }); },
     'exam-topic'(d) { this.show('exam', { topic: d.topic }); },
+    'start-exam'(d) { const n = Number(d.n); const m = this.examMeta(); this.start('exam', d.topic, n, { limitSec: Math.round(n * m.minutes / m.questions) * 60 }); },
     answer(d) {
       const s = this.session; if (!s) return;
       const item = this.current(); if (item.done) return;
@@ -470,7 +471,13 @@ const App = {
       const last = this.p.exams.slice(-3).reverse();
       return `<div class="screen">
         <header class="top"><h1>Prüfungssimulation</h1><p class="muted">Wie in der echten Prüfung: keine Hilfe, Auswertung am Ende. Bestanden ab ${meta.passPercent} %${this.bank.topics.some(x => x.examQuestions) ? '. Bei „Alle Themen“ werden die Fragen wie in der Prüfung auf die Fächer verteilt' : ''}.</p></header>
+        ${this.bank.topics.some(x => x.examQuestions) ? `<div class="card">
+          <b>Fachprüfung wie in der echten Prüfung</b>
+          <p class="muted small">Ein Tipp, und es geht los: die Fragenanzahl des Fachs, Auswertung in Prozent, danach alle Fragen mit richtig/falsch zum Durchsehen.</p>
+          <div class="list plain">${this.bank.topics.filter(x => x.examQuestions).map(x => `<button type="button" class="row" data-action="start-exam" data-topic="${U.esc(x.id)}" data-n="${x.examQuestions}"><span class="ic">${x.icon || '📘'}</span><span class="grow"><b>${U.esc(x.name)}</b><br><small class="muted">${x.examQuestions} Fragen · ${Math.round(x.examQuestions * perQ)} Min</small></span><span class="chev">›</span></button>`).join('')}</div>
+        </div>` : ''}
         <form class="card" data-form="exam">
+          <h2>Eigene Prüfung zusammenstellen</h2>
           <label>Themenbereich<select name="topic" data-exam-topic>
             <option value="all" ${topic === 'all' ? 'selected' : ''}>Alle Themen (${this.bank.questions.length} Fragen)</option>
             ${this.bank.topics.map(t => `<option value="${U.esc(t.id)}" ${t.id === topic ? 'selected' : ''}>${U.esc(t.name)} (${Quiz.pool(this.bank, t.id).length})</option>`).join('')}

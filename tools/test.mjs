@@ -67,6 +67,15 @@ try {
   await page.click('[data-action=nav][data-screen=exam]');
   await page.waitForSelector('form[data-form=exam]');
   await shot('exam-setup');
+  if (await page.$('[data-action=start-exam]')) {   // Fachprüfung per Direkteinstieg: starten und gleich abbrechen
+    await page.click('[data-action=start-exam]');
+    await page.waitForSelector('.screen-quiz .timer');
+    assert(await page.evaluate(() => App.session.items.length === App.bank.topics.find(t => t.id === App.session.topic).examQuestions), 'Fachprüfung hat Prüfungsanzahl');
+    await page.click('[data-action=quit]');
+    await page.waitForSelector('.screen-home');
+    await page.click('[data-action=nav][data-screen=exam]');
+    await page.waitForSelector('form[data-form=exam]');
+  }
   await page.selectOption('select[name=n]', { index: 0 });
   await page.selectOption('select[name=minutes]', { index: 1 });
   const examN = Number(await page.$eval('select[name=n]', el => el.value));
