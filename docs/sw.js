@@ -1,5 +1,5 @@
 // Service Worker: App-Shell offline verfügbar, Fragenkatalog network-first.
-const CACHE = 'flugschule-v2';
+const CACHE = 'flugschule-__BUILD__'; // __BUILD__ wird beim Deploy durch den Commit ersetzt → jede Veröffentlichung ist ein Update
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'assets/css/app.css', 'assets/js/util.js', 'assets/js/crypto.js', 'assets/js/store.js', 'assets/js/game.js', 'assets/js/quiz.js', 'assets/js/app.js', 'assets/icon.svg', 'assets/icon-192.png', 'assets/icon-512.png'];
 
 self.addEventListener('install', e => {

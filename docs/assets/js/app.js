@@ -1,7 +1,7 @@
 'use strict';
 // Haupt-App: Screens, Navigation, Session-Ablauf
 const App = {
-  version: '0.1.0',
+  version: '0.2.0', build: '__BUILD__',
   bank: null, key: null, profile: null, p: null, session: null, lastSession: null,
   screen: 'boot', args: {}, timer: null, payload: null,
   el: null,
@@ -37,14 +37,25 @@ const App = {
 
   registerSW() {
     if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
-    navigator.serviceWorker.register('sw.js').then(reg => {
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+      this.swReg = reg;
+      const offer = () => U.toast('Neue Version verfügbar', { action: 'Neu laden', onAction: () => location.reload(), duration: 15000 });
+      if (reg.waiting && navigator.serviceWorker.controller) offer();
       reg.addEventListener('updatefound', () => {
         const w = reg.installing;
-        w && w.addEventListener('statechange', () => {
-          if (w.state === 'installed' && navigator.serviceWorker.controller) U.toast('Update verfügbar', { action: 'Neu laden', onAction: () => location.reload(), duration: 8000 });
-        });
+        w && w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) offer(); });
       });
+      // Beim Zurückkehren in die App (z. B. vom Homescreen) nach Updates schauen
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
     }).catch(() => { /* offline-Modus optional */ });
+  },
+  async forceUpdate() {
+    U.toast('Suche nach Updates…');
+    try {
+      if (this.swReg) { await this.swReg.update(); }
+      const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k)));
+    } catch (e) { /* ignore */ }
+    location.reload();
   },
 
   // ---------- Navigation ----------
@@ -93,11 +104,20 @@ const App = {
     this.show('home', {}, { replace: !!replace });
   },
   save() { if (this.profile && this.p) Store.saveProgress(this.profile.id, this.p); },
-  topicName(id) { const t = this.bank.topics.find(t => t.id === id); return t ? t.name : (id === 'all' ? 'Alle Themen' : id); },
+  topicName(id) {
+    if (Array.isArray(id)) return id.length === this.bank.topics.length ? 'Alle Themen' : `Meine Fächer (${id.length})`;
+    const t = this.bank.topics.find(t => t.id === id); return t ? t.name : (id === 'all' ? 'Alle Themen' : id);
+  },
+  // Fächerauswahl: null = alle, sonst Liste der aktiven Fach-IDs
+  activeTopics() { const sel = this.p.settings.topics; const ids = this.bank.topics.map(t => t.id); if (!Array.isArray(sel)) return ids; const f = ids.filter(id => sel.includes(id)); return f.length ? f : ids; },
+  scope() { const a = this.activeTopics(); return a.length === this.bank.topics.length ? 'all' : a; },
+  hasFocus() { return this.scope() !== 'all'; },
   topicIcon(id) { const t = this.bank.topics.find(t => t.id === id); return t?.icon || '📘'; },
   examMeta() {
     const m = Object.assign({ passPercent: 75 }, this.bank.meta?.exam || {});
-    if (!m.questions) m.questions = this.bank.topics.reduce((s, t) => s + (t.examQuestions || 0), 0) || 20;
+    const act = this.activeTopics();
+    const fromTopics = this.bank.topics.filter(t => act.includes(t.id)).reduce((s, t) => s + (t.examQuestions || 0), 0);
+    if (fromTopics) m.questions = fromTopics; else if (!m.questions) m.questions = 20;
     if (!m.minutes) m.minutes = Math.round(m.questions * 1.5); // Annahme: 1,5 Min je Frage, im Setup änderbar
     return m;
   },
@@ -132,6 +152,7 @@ const App = {
 
   // ---------- Session ----------
   start(mode, topic, n, opts = {}) {
+    if (topic === 'all') topic = this.scope();   // „Alle Themen“ respektiert die Fächerauswahl
     let qs;
     if (mode === 'exam') qs = Quiz.pickExam(this.bank, this.p, topic, n);
     else if (mode === 'review') qs = Quiz.pickReview(this.bank, this.p, topic, n);
@@ -303,6 +324,8 @@ const App = {
       const data = { type: 'flugschule-progress', v: 1, exportedAt: new Date().toISOString(), profile: { name: this.profile.name, email: this.profile.email }, progress: this.p };
       U.toast((await U.copy(JSON.stringify(data))) ? 'Sicherung in die Zwischenablage kopiert' : 'Kopieren nicht möglich');
     },
+    'force-update'() { this.forceUpdate(); },
+    'topics-all'() { this.el.querySelectorAll('form[data-form=topics] input[name=t]').forEach(c => { c.checked = true; }); },
     'switch-profile'() { Store.del('current'); this.profile = null; this.p = null; this.show('login', {}, { replace: true }); },
     lock() { Store.del('key'); Store.del('current'); this.key = null; this.bank = null; this.profile = null; this.p = null; this.payload = null; this.show('lock', {}, { replace: true }); },
     async reset() {
@@ -349,6 +372,12 @@ const App = {
     exam(form, fd) {
       const topic = String(fd.get('topic')), n = Number(fd.get('n')), minutes = Number(fd.get('minutes'));
       this.start('exam', topic, n, { limitSec: minutes > 0 ? minutes * 60 : 0 });
+    },
+    topics(form, fd) {
+      const sel = fd.getAll('t').map(String);
+      if (!sel.length) { U.toast('Bitte mindestens ein Fach auswählen', { kind: 'bad' }); return; }
+      this.p.settings.topics = sel.length === this.bank.topics.length ? null : sel;
+      this.save(); U.toast(sel.length === this.bank.topics.length ? 'Alle Fächer aktiv' : `${sel.length} Fächer aktiv`, { kind: 'ok' }); this.render();
     },
     goal(form, fd) { this.p.settings.dailyGoal = Number(fd.get('goal')) || 20; this.save(); U.toast('Tagesziel gespeichert'); this.render(); },
     import(form, fd) { this.importText(String(fd.get('data') || '')); }
@@ -407,12 +436,14 @@ const App = {
       const p = this.p, b = this.bank;
       const lv = Game.levelFor(p.xp), rank = Game.rankFor(lv.level), nextRank = Game.nextRank(lv.level);
       const streak = Game.streakAlive(p), today = Game.today(p), goal = p.settings.dailyGoal;
-      const review = Game.reviewCount(p, b), due = Game.dueCount(p, b);
-      const unseen = b.questions.filter(q => !p.q[q.id]).length;
+      const sc = this.scope(), pool = Quiz.pool(b, sc);
+      const review = Game.reviewCount(p, b, sc), due = Game.dueCount(p, b, sc);
+      const unseen = pool.filter(q => !p.q[q.id]).length;
       const known = b.questions.filter(q => (p.q[q.id]?.right || 0) > 0).length;
       const goalPct = U.pct(Math.min(today.answered, goal), goal);
       return `<div class="screen">
         ${b.meta?.demo ? `<div class="banner">⚠️ Demo-Inhalte – die echten Fragen aus der PDF folgen.</div>` : ''}
+        ${this.hasFocus() ? `<button type="button" class="banner focus" data-action="nav" data-screen="profile">🎯 Fokus: ${this.activeTopics().length} von ${b.topics.length} Fächern · ${pool.length} Fragen <span class="muted">ändern ›</span></button>` : ''}
         <header class="top row">
           <div class="grow"><h1>Hallo ${U.esc(this.profile.name.split(' ')[0])} 👋</h1><p class="muted">${rank.icon} ${rank.name} · Level ${lv.level}</p></div>
           <div class="goal">${U.ring(goalPct, 64, 7, goalPct >= 100 ? 'done' : '')}<div class="goal-txt">${today.answered}<small>/${goal}</small></div></div>
@@ -499,7 +530,7 @@ const App = {
         <form class="card" data-form="exam">
           <h2>Eigene Prüfung zusammenstellen</h2>
           <label>Themenbereich<select name="topic" data-exam-topic>
-            <option value="all" ${topic === 'all' ? 'selected' : ''}>Alle Themen (${this.bank.questions.length} Fragen)</option>
+            <option value="all" ${topic === 'all' ? 'selected' : ''}>${this.hasFocus() ? `Meine Fächer (${Quiz.pool(this.bank, this.scope()).length} Fragen)` : `Alle Themen (${this.bank.questions.length} Fragen)`}</option>
             ${this.bank.topics.map(t => `<option value="${U.esc(t.id)}" ${t.id === topic ? 'selected' : ''}>${U.esc(t.name)} (${Quiz.pool(this.bank, t.id).length})</option>`).join('')}
           </select></label>
           <label>Anzahl Fragen<select name="n">${counts.map(c => `<option value="${c}" ${c === selN ? 'selected' : ''}>${c}${c === examN ? ' (wie in der Prüfung)' : ''}</option>`).join('')}</select></label>
@@ -630,6 +661,12 @@ const App = {
       const p = this.p, pr = this.profile;
       return `<div class="screen">
         <header class="top row"><span class="avatar big">${U.esc(pr.name[0] || '?').toUpperCase()}</span><div class="grow"><h1>${U.esc(pr.name)}</h1><p class="muted">${U.esc(pr.email)}</p></div></header>
+        <form class="card" data-form="topics">
+          <b>Meine Fächer</b>
+          <p class="muted small">Wähle die Fächer, die du gerade lernst. „Weiterlernen“, „Fehler wiederholen“ und die Prüfung über alle Themen nutzen dann nur diese Fächer. Einzelne Themen und Fachprüfungen bleiben immer erreichbar.</p>
+          <div class="checklist">${this.bank.topics.map(t => `<label class="check"><input type="checkbox" name="t" value="${U.esc(t.id)}" ${this.activeTopics().includes(t.id) ? 'checked' : ''}> ${t.icon || ''} ${U.esc(t.name)} <small class="muted">(${Quiz.pool(this.bank, t.id).length})</small></label>`).join('')}</div>
+          <div class="row gap"><button type="button" class="btn" data-action="topics-all">Alle</button><button class="btn primary grow" type="submit">Fächer speichern</button></div>
+        </form>
         <form class="card" data-form="goal"><label>Tagesziel<select name="goal">${[5, 10, 20, 30, 50, 100].map(g => `<option value="${g}" ${g === p.settings.dailyGoal ? 'selected' : ''}>${g} Fragen pro Tag</option>`).join('')}</select></label><button class="btn" type="submit">Speichern</button></form>
         <div class="card">
           <b>Fortschritt sichern & übertragen</b>
@@ -652,7 +689,8 @@ const App = {
           <button type="button" class="btn danger ghost" data-action="reset">Fortschritt zurücksetzen</button>
           <button type="button" class="btn danger ghost" data-action="delete-profile">Profil auf diesem Gerät löschen</button>
         </div>
-        <p class="muted small center">Flugschule Prüfungstrainer v${this.version}${this.bank.meta?.version ? ` · Katalog ${U.esc(this.bank.meta.version)}` : ''} · ${this.bank.questions.length} Fragen</p>
+        <button type="button" class="btn" data-action="force-update">🔄 Nach Updates suchen & neu laden</button>
+        <p class="muted small center">Flugschule Prüfungstrainer v${this.version}${this.build && !this.build.startsWith('__') ? ` (${U.esc(this.build)})` : ''}${this.bank.meta?.version ? ` · Katalog ${U.esc(this.bank.meta.version)}` : ''} · ${this.bank.questions.length} Fragen</p>
       </div>`;
     }
   }

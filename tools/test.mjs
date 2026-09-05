@@ -128,6 +128,22 @@ try {
   await page.click('[data-action=nav][data-screen=profile]');
   await page.waitForSelector('[data-action=export]');
   await shot('profile');
+  // Fächerauswahl: nur die ersten beiden Fächer aktiv → Weiterlernen nutzt nur diese
+  if ((await page.$$('form[data-form=topics] input[name=t]')).length > 2) {
+    await page.$$eval('form[data-form=topics] input[name=t]', cs => cs.forEach((c, i) => { c.checked = i < 2; }));
+    await page.click('form[data-form=topics] button[type=submit]');
+    await page.click('[data-action=nav][data-screen=home]');
+    await page.waitForSelector('.banner.focus');
+    const ok = await page.evaluate(() => { const a = App.activeTopics(); const qs = Quiz.pickLearn(App.bank, App.p, App.scope(), 30); return a.length === 2 && qs.every(q => a.includes(q.topic)) && App.examMeta().questions === App.bank.topics.filter(t => a.includes(t.id)).reduce((s, t) => s + t.examQuestions, 0); });
+    assert(ok, 'Fächerauswahl wirkt auf Weiterlernen und Prüfungsumfang');
+    await shot('focus');
+    await page.click('[data-action=nav][data-screen=profile]');
+    await page.click('[data-action=topics-all]');
+    await page.click('form[data-form=topics] button[type=submit]');
+    await page.click('[data-action=nav][data-screen=home]');
+    await page.waitForSelector('.screen-home');
+    assert(!(await page.$('.banner.focus')), 'Fokus-Hinweis weg, wenn alle Fächer aktiv');
+  }
 
   // Reload: gespeicherter Schlüssel + Profil → direkt Home
   await page.reload();

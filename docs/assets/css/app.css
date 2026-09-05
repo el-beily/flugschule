@@ -226,3 +226,10 @@ label.file input { display: none; }
 .modal p { margin: 0 0 1rem; font-size: 1.05rem; font-weight: 600; line-height: 1.4; }
 .btn.danger-solid { background: var(--bad); border-color: var(--bad); color: #fff; }
 @media (min-width: 620px) { .modal-bg { align-items: center; } }
+
+/* Fächerauswahl + Fokus-Hinweis */
+.checklist { display: flex; flex-direction: column; gap: .2rem; margin: .4rem 0 .8rem; }
+.checklist label.check { margin: 0; padding: .45rem .2rem; border-top: 1px solid var(--line); }
+.checklist label.check:first-child { border-top: 0; }
+.banner.focus { display: block; width: 100%; text-align: left; border: 0; cursor: pointer; background: var(--primary-soft); color: var(--text); font: inherit; font-weight: 600; }
+.banner.focus .muted { float: right; font-weight: 500; }

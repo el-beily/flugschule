@@ -75,11 +75,11 @@ const Game = {
   },
   dueCount(p, bank, topic) {
     const now = Date.now();
-    return bank.questions.filter(q => (!topic || topic === 'all' || q.topic === topic) && p.q[q.id] && p.q[q.id].due <= now && p.q[q.id].box < 5).length;
+    return bank.questions.filter(q => Quiz.inScope(q, topic) && p.q[q.id] && p.q[q.id].due <= now && p.q[q.id].box < 5).length;
   },
   reviewCount(p, bank, topic) {
     const now = Date.now();
-    return bank.questions.filter(q => { if (topic && topic !== 'all' && q.topic !== topic) return false; const e = p.q[q.id]; return e && ((e.wrong > 0 && e.box < 3) || (e.due <= now && e.box < 5)); }).length;
+    return bank.questions.filter(q => { if (!Quiz.inScope(q, topic)) return false; const e = p.q[q.id]; return e && ((e.wrong > 0 && e.box < 3) || (e.due <= now && e.box < 5)); }).length;
   },
   allRight(p, bank) { return bank.questions.every(q => (p.q[q.id]?.right || 0) > 0); }
 };

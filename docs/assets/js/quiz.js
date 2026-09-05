@@ -1,7 +1,8 @@
 'use strict';
 // Quiz-Engine: Fragenauswahl + Session-Objekt
 const Quiz = {
-  pool(bank, topic) { return (!topic || topic === 'all') ? bank.questions.slice() : bank.questions.filter(q => q.topic === topic); },
+  inScope(q, topic) { return !topic || topic === 'all' || (Array.isArray(topic) ? topic.includes(q.topic) : q.topic === topic); },
+  pool(bank, topic) { return bank.questions.filter(q => this.inScope(q, topic)); },
   // Lernen: fällige Fragen (niedrige Box zuerst) gemischt mit neuen, dann der Rest
   pickLearn(bank, p, topic, n) {
     const now = Date.now();
@@ -29,8 +30,8 @@ const Quiz = {
   },
   // Prüfung: bei „Alle Themen“ Fragen anteilig nach den Prüfungsquoten der Fächer ziehen
   pickExam(bank, p, topic, n) {
-    if (topic && topic !== 'all') return U.shuffle(this.pool(bank, topic)).slice(0, n);
-    const quotas = bank.topics.map(t => ({ id: t.id, w: t.examQuestions || this.pool(bank, t.id).length, pool: U.shuffle(this.pool(bank, t.id)) }));
+    if (topic && topic !== 'all' && !Array.isArray(topic)) return U.shuffle(this.pool(bank, topic)).slice(0, n);
+    const quotas = bank.topics.filter(t => !Array.isArray(topic) || topic.includes(t.id)).map(t => ({ id: t.id, w: t.examQuestions || this.pool(bank, t.id).length, pool: U.shuffle(this.pool(bank, t.id)) }));
     const wsum = quotas.reduce((s, q) => s + q.w, 0);
     let out = [];
     quotas.forEach(q => { q.take = Math.min(q.pool.length, Math.floor(n * q.w / wsum)); });
