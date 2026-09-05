@@ -19,7 +19,7 @@ const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', e => errors.push('pageerror: ' + e.message));
 page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
-page.on('dialog', d => d.accept());
+page.on('dialog', d => { errors.push('nativer Browser-Dialog: ' + d.message()); d.dismiss(); });
 let step = 0;
 const shot = async name => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${String(++step).padStart(2, '0')}-${name}.png` }); };
 const assert = (cond, msg) => { if (!cond) throw new Error('Assertion: ' + msg); };
@@ -72,6 +72,8 @@ try {
     await page.waitForSelector('.screen-quiz .timer');
     assert(await page.evaluate(() => App.session.items.length === App.bank.topics.find(t => t.id === App.session.topic).examQuestions), 'Fachprüfung hat Prüfungsanzahl');
     await page.click('[data-action=quit]');
+    await page.waitForSelector('.modal');
+    await page.click('.modal [data-m=ok]');
     await page.waitForSelector('.screen-home');
     await page.click('[data-action=nav][data-screen=exam]');
     await page.waitForSelector('form[data-form=exam]');
@@ -91,14 +93,21 @@ try {
   await shot('exam-overview');
   assert(await page.evaluate(n => document.querySelectorAll('.qcell.answered').length === n - 1, examN), 'n-1 Fragen in Übersicht beantwortet');
   assert(await page.evaluate(() => document.querySelectorAll('.qcell.flagged').length === 1), '1 Frage markiert');
+  // Abgabe mit offener Frage: eigener Dialog erscheint, „Zurück“ bricht ab
+  await page.click('[data-action=finish-exam]');
+  await page.waitForSelector('.modal');
+  await page.click('.modal [data-m=cancel]');
+  await page.waitForSelector('.modal', { state: 'detached' });
+  assert(!!(await page.$('.qgrid')), 'nach Abbruch weiter in der Übersicht');
   await page.click('.qcell:not(.answered)');
   await page.waitForSelector('.exam-nav');
   await page.click('.answer:not(:disabled)');
   await page.click('[data-action=overview]');
   await page.waitForSelector('.qgrid');
   assert(await page.evaluate(n => document.querySelectorAll('.qcell.answered').length === n, examN), 'alle beantwortet');
-  await page.click('[data-action=finish-exam]');
+  await page.click('[data-action=finish-exam]');   // alles beantwortet → ohne Rückfrage direkt zum Ergebnis
   await page.waitForSelector('.screen-result');
+  assert(!(await page.$('.modal')), 'kein Dialog bei vollständiger Prüfung');
   assert(await page.evaluate(n => App.p.exams.length === 1 && App.p.exams[0].total === n, examN), 'Prüfung gespeichert');
   assert(await page.evaluate(n => App.p.answered === 10 + n, examN), 'Prüfungsantworten verbucht');
   await shot('exam-result');

@@ -113,6 +113,23 @@ const App = {
     } catch (e) { /* offline */ }
   },
 
+  // Eigener Bestätigungsdialog. Kein window.confirm(): Safari bietet „Dialogfelder unterdrücken“ an,
+  // danach liefert confirm() stumm false und die App wäre blockiert.
+  confirm(msg, opts = {}) {
+    return new Promise(resolve => {
+      const ov = document.createElement('div'); ov.className = 'modal-bg';
+      ov.innerHTML = `<div class="modal" role="dialog" aria-modal="true"><p>${U.esc(msg)}</p>
+        <div class="row gap"><button type="button" class="btn grow" data-m="cancel">${U.esc(opts.cancel || 'Abbrechen')}</button>
+        <button type="button" class="btn grow ${opts.danger ? 'danger-solid' : 'primary'}" data-m="ok">${U.esc(opts.ok || 'OK')}</button></div></div>`;
+      const done = v => { ov.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
+      const onKey = e => { if (e.key === 'Escape') done(false); };
+      ov.addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (b) done(b.dataset.m === 'ok'); else if (e.target === ov) done(false); });
+      document.addEventListener('keydown', onKey);
+      document.body.appendChild(ov);
+      ov.querySelector('[data-m=ok]').focus();
+    });
+  },
+
   // ---------- Session ----------
   start(mode, topic, n, opts = {}) {
     let qs;
@@ -182,9 +199,10 @@ const App = {
     const celebrate = s.mode === 'exam' ? sum.pct >= s.passPercent : (sum.pct >= 80 && sum.total >= 5);
     if (celebrate) setTimeout(() => U.confetti(), 200);
   },
-  quit() {
+  async quit() {
     if (!this.session) return;
-    if (!confirm('Session abbrechen? Bereits beantwortete Fragen bleiben gespeichert.')) return;
+    if (!await this.confirm('Session abbrechen? Bereits beantwortete Fragen bleiben gespeichert.', { ok: 'Abbrechen', cancel: 'Weitermachen', danger: true })) return;
+    if (!this.session) return;
     this.stopTimer(); this.session = null; this.show('home', {}, { replace: true });
   },
   startTimer() {
@@ -249,11 +267,12 @@ const App = {
     flag() { const item = this.current(); item.flagged = !item.flagged; this.render(); },
     overview() { this.args = { overview: !this.args.overview }; this.render(); },
     quit() { this.quit(); },
-    'finish-exam'() {
+    async 'finish-exam'() {
       const s = this.session; if (!s) return;
       const open = s.items.filter(it => !it.picked.length).length;
-      if (!confirm(open ? `Prüfung abgeben? ${open} ${open === 1 ? 'Frage ist' : 'Fragen sind'} noch unbeantwortet und ${open === 1 ? 'zählt' : 'zählen'} als falsch.` : 'Prüfung jetzt abgeben?')) return;
-      this.submitExam('manual');
+      // Alles beantwortet → direkt auswerten, keine Rückfrage
+      if (open && !await this.confirm(`${open} ${open === 1 ? 'Frage ist' : 'Fragen sind'} noch unbeantwortet und ${open === 1 ? 'zählt' : 'zählen'} als falsch. Trotzdem abgeben?`, { ok: 'Abgeben', cancel: 'Zurück' })) return;
+      if (this.session === s) this.submitExam('manual');
     },
     'retry-wrong'() { const s = this.lastSession; if (s) this.startFromQuestions('review', s.items.filter(it => !it.correct).map(it => it.q)); },
     'retry-same'() { const s = this.lastSession; if (s) { if (s.mode === 'exam') this.show('exam', { topic: s.topic }); else this.startFromQuestions(s.mode, s.items.map(it => it.q)); } },
@@ -286,12 +305,12 @@ const App = {
     },
     'switch-profile'() { Store.del('current'); this.profile = null; this.p = null; this.show('login', {}, { replace: true }); },
     lock() { Store.del('key'); Store.del('current'); this.key = null; this.bank = null; this.profile = null; this.p = null; this.payload = null; this.show('lock', {}, { replace: true }); },
-    reset() {
-      if (!confirm('Wirklich den gesamten Fortschritt dieses Profils löschen?')) return;
+    async reset() {
+      if (!await this.confirm('Wirklich den gesamten Fortschritt dieses Profils löschen?', { ok: 'Löschen', danger: true })) return;
       this.p = Store.emptyProgress(); this.save(); U.toast('Fortschritt zurückgesetzt'); this.render();
     },
-    'delete-profile'() {
-      if (!confirm('Profil und Fortschritt auf diesem Gerät löschen?')) return;
+    async 'delete-profile'() {
+      if (!await this.confirm('Profil und Fortschritt auf diesem Gerät löschen?', { ok: 'Löschen', danger: true })) return;
       Store.del('p:' + this.profile.id); Store.saveProfiles(Store.profiles().filter(x => x.id !== this.profile.id)); Store.del('current');
       this.profile = null; this.p = null; this.show('login', {}, { replace: true });
     }
@@ -344,11 +363,11 @@ const App = {
       this.render();
     }
   },
-  importText(text) {
+  async importText(text) {
     try {
       const data = JSON.parse(text.trim());
       if (data.type !== 'flugschule-progress' || !data.progress) throw new Error('Kein gültiger Export');
-      if (!confirm(`Fortschritt von „${data.profile?.name || '?'}“ (${data.profile?.email || '?'}) importieren? Der aktuelle Fortschritt dieses Profils wird ersetzt.`)) return;
+      if (!await this.confirm(`Fortschritt von „${data.profile?.name || '?'}“ (${data.profile?.email || '?'}) importieren? Der aktuelle Fortschritt dieses Profils wird ersetzt.`, { ok: 'Importieren' })) return;
       this.p = Object.assign(Store.emptyProgress(), data.progress);
       this.save(); U.toast('Fortschritt importiert', { kind: 'ok' }); this.render();
     } catch (ex) { U.toast('Import fehlgeschlagen: ' + ex.message, { kind: 'bad' }); }
