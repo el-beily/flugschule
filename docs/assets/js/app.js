@@ -445,7 +445,7 @@ const App = {
       return `<div class="screen">
         <header class="top row"><button type="button" class="icon" data-action="back">‹</button><div class="grow"><h1>${t.icon || '📘'} ${U.esc(t.name)}</h1></div></header>
         <div class="card center">
-          ${U.ring(m.pct, 120, 12)}<div class="ring-label"><b>${m.pct} %</b><small>richtig beantwortet</small></div>
+          ${U.ring(m.pct, 120, 12)}<div class="ring-label"><b>${m.pct} %</b><small>richtig</small></div>
           <div class="statrow"><div><b>${m.known}/${m.total}</b><small>richtig</small></div><div><b>${m.mastered}</b><small>sicher</small></div><div><b>${m.accuracy} %</b><small>Trefferquote</small></div></div>
           <p class="muted small">„Sicher“ = 3-mal in Folge richtig beantwortet. Falsch beantwortete Fragen kommen früher wieder.</p>
         </div>
