@@ -453,7 +453,7 @@ const App = {
           <div class="bar"><div style="width:${Math.round(lv.progress * 100)}%"></div></div>
           <div class="statrow">
             <div><b>${streak} 🔥</b><small>${streak === 1 ? 'Tag' : 'Tage'} Streak</small></div>
-            <div><b>${known}/${b.questions.length}</b><small>richtig beantwortet</small></div>
+            <div><b>${known}/${b.questions.length}</b><small>schon richtig</small></div>
             <div><b>${U.pct(p.correct, p.answered)} %</b><small>Trefferquote</small></div>
           </div>
         </div>
