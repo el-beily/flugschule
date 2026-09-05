@@ -26,7 +26,7 @@ const Game = {
     { id: 'exam1', icon: '📜', name: 'Bestanden', desc: 'Erste Prüfungssimulation bestanden', check: p => p.exams.some(e => e.passed) },
     { id: 'exam5', icon: '🎖️', name: 'Prüfungsprofi', desc: '5 Prüfungssimulationen bestanden', check: p => p.exams.filter(e => e.passed).length >= 5 },
     { id: 'exam100', icon: '💯', name: 'Fehlerfrei', desc: 'Prüfungssimulation mit 100 % bestanden', check: p => p.exams.some(e => e.pct === 100 && e.total >= 10) },
-    { id: 'topic', icon: '🧠', name: 'Themenmeister', desc: 'Ein Thema komplett gemeistert', check: (p, c) => c.topicMastered },
+    { id: 'topic', icon: '🧠', name: 'Themenmeister', desc: 'Alle Fragen eines Themas sicher (3× in Folge richtig)', check: (p, c) => c.topicMastered },
     { id: 'early', icon: '🌅', name: 'Frühaufsteher', desc: 'Vor 7 Uhr gelernt', check: (p, c) => c.hour < 7 },
     { id: 'night', icon: '🦉', name: 'Nachtflug', desc: 'Nach 23 Uhr gelernt', check: (p, c) => c.hour >= 23 },
     { id: 'allright', icon: '🏆', name: 'Prüfungsreif', desc: 'Jede Frage mindestens einmal richtig beantwortet', check: (p, c) => c.allRight }
@@ -66,11 +66,12 @@ const Game = {
   },
   topicMastery(p, bank, topicId) {
     const qs = bank.questions.filter(q => q.topic === topicId);
-    const mastered = qs.filter(q => (p.q[q.id]?.box || 0) >= 3).length;
+    const mastered = qs.filter(q => (p.q[q.id]?.box || 0) >= 3).length;   // „sicher“: 3× in Folge richtig (Leitner-Box ≥ 3)
+    const known = qs.filter(q => (p.q[q.id]?.right || 0) > 0).length;     // mindestens einmal richtig beantwortet
     const seen = qs.filter(q => p.q[q.id]).length;
     const right = qs.reduce((s, q) => s + (p.q[q.id]?.right || 0), 0);
     const total = qs.reduce((s, q) => s + (p.q[q.id]?.seen || 0), 0);
-    return { total: qs.length, mastered, seen, pct: U.pct(mastered, qs.length), accuracy: U.pct(right, total) };
+    return { total: qs.length, mastered, known, seen, pct: U.pct(known, qs.length), masteredPct: U.pct(mastered, qs.length), accuracy: U.pct(right, total) };
   },
   dueCount(p, bank, topic) {
     const now = Date.now();

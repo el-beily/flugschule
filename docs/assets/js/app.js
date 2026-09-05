@@ -142,7 +142,7 @@ const App = {
     if (after > before) { s.levelUps++; if (!quiet) this.onLevelUp(after); }
     const dailyNow = Game.today(p).answered >= p.settings.dailyGoal;
     if (dailyNow && !goalBefore && !quiet) { U.toast('🎯 Tagesziel erreicht!', { kind: 'ok' }); }
-    const ctx = { combo: s.combo, hour: new Date().getHours(), dailyDone: dailyNow, topicMastered: Game.topicMastery(p, this.bank, item.q.topic).pct === 100, allRight: Game.allRight(p, this.bank) };
+    const ctx = { combo: s.combo, hour: new Date().getHours(), dailyDone: dailyNow, topicMastered: Game.topicMastery(p, this.bank, item.q.topic).masteredPct === 100, allRight: Game.allRight(p, this.bank) };
     const fresh = Game.checkBadges(p, ctx);
     fresh.forEach(b => { s.badges.push(b.id); if (!quiet) setTimeout(() => U.toast(`${b.icon} Neues Abzeichen: <b>${U.esc(b.name)}</b>`, { kind: 'badge', duration: 3500 }), 400); });
     if (!quiet) { this.save(); U.vibrate(item.correct ? 30 : [60, 40, 60]); }
@@ -174,7 +174,7 @@ const App = {
       if (p.exams.length > 50) p.exams = p.exams.slice(-50);
       if (passed) { p.xp += 50; s.xp += 50; }
     }
-    const ctx = { combo: s.combo, hour: new Date().getHours(), dailyDone: Game.today(p).answered >= p.settings.dailyGoal, topicMastered: this.bank.topics.some(t => Game.topicMastery(p, this.bank, t.id).pct === 100), allRight: Game.allRight(p, this.bank) };
+    const ctx = { combo: s.combo, hour: new Date().getHours(), dailyDone: Game.today(p).answered >= p.settings.dailyGoal, topicMastered: this.bank.topics.some(t => Game.topicMastery(p, this.bank, t.id).masteredPct === 100), allRight: Game.allRight(p, this.bank) };
     Game.checkBadges(p, ctx).forEach(b => s.badges.push(b.id));
     this.save();
     this.lastSession = s; this.session = null;
@@ -390,7 +390,7 @@ const App = {
       const streak = Game.streakAlive(p), today = Game.today(p), goal = p.settings.dailyGoal;
       const review = Game.reviewCount(p, b), due = Game.dueCount(p, b);
       const unseen = b.questions.filter(q => !p.q[q.id]).length;
-      const mastered = b.questions.filter(q => (p.q[q.id]?.box || 0) >= 3).length;
+      const known = b.questions.filter(q => (p.q[q.id]?.right || 0) > 0).length;
       const goalPct = U.pct(Math.min(today.answered, goal), goal);
       return `<div class="screen">
         ${b.meta?.demo ? `<div class="banner">⚠️ Demo-Inhalte – die echten Fragen aus der PDF folgen.</div>` : ''}
@@ -403,7 +403,7 @@ const App = {
           <div class="bar"><div style="width:${Math.round(lv.progress * 100)}%"></div></div>
           <div class="statrow">
             <div><b>${streak} 🔥</b><small>${streak === 1 ? 'Tag' : 'Tage'} Streak</small></div>
-            <div><b>${mastered}/${b.questions.length}</b><small>gemeistert</small></div>
+            <div><b>${known}/${b.questions.length}</b><small>richtig beantwortet</small></div>
             <div><b>${U.pct(p.correct, p.answered)} %</b><small>Trefferquote</small></div>
           </div>
         </div>
@@ -434,7 +434,7 @@ const App = {
         <div class="card list">${this.bank.topics.map(t => { const m = Game.topicMastery(this.p, this.bank, t.id); return `
           <button type="button" class="row" data-action="open-topic" data-id="${U.esc(t.id)}">
             <span class="ic">${t.icon || '📘'}</span>
-            <span class="grow"><b>${U.esc(t.name)}</b><div class="bar small"><div style="width:${m.pct}%"></div></div><small class="muted">${m.mastered}/${m.total} gemeistert${m.seen < m.total ? ` · ${m.total - m.seen} neu` : ''}</small></span>
+            <span class="grow"><b>${U.esc(t.name)}</b><div class="bar small"><div style="width:${m.pct}%"></div></div><small class="muted">${m.known}/${m.total} richtig beantwortet${m.mastered ? ` · ${m.mastered} sicher` : ''}${m.seen < m.total ? ` · ${m.total - m.seen} neu` : ''}</small></span>
             <span class="chev">›</span></button>`; }).join('')}</div>
       </div>`;
     },
@@ -445,8 +445,9 @@ const App = {
       return `<div class="screen">
         <header class="top row"><button type="button" class="icon" data-action="back">‹</button><div class="grow"><h1>${t.icon || '📘'} ${U.esc(t.name)}</h1></div></header>
         <div class="card center">
-          ${U.ring(m.pct, 120, 12)}<div class="ring-label"><b>${m.pct} %</b><small>gemeistert</small></div>
-          <div class="statrow"><div><b>${m.total}</b><small>Fragen</small></div><div><b>${m.seen}</b><small>gesehen</small></div><div><b>${m.accuracy} %</b><small>Trefferquote</small></div></div>
+          ${U.ring(m.pct, 120, 12)}<div class="ring-label"><b>${m.pct} %</b><small>richtig beantwortet</small></div>
+          <div class="statrow"><div><b>${m.known}/${m.total}</b><small>richtig</small></div><div><b>${m.mastered}</b><small>sicher</small></div><div><b>${m.accuracy} %</b><small>Trefferquote</small></div></div>
+          <p class="muted small">„Sicher“ = 3-mal in Folge richtig beantwortet. Falsch beantwortete Fragen kommen früher wieder.</p>
         </div>
         ${t.description || t.examQuestions || t.source ? `<div class="card small muted">${t.description ? `<p>${U.esc(t.description)}</p>` : ''}${t.examQuestions ? `<p>In der Prüfung: ${t.examQuestions} Fragen aus diesem Fach.</p>` : ''}${t.source ? `<p>Quelle: ${U.esc(t.source)}</p>` : ''}</div>` : ''}
         <div class="stack">
