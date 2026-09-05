@@ -26,6 +26,7 @@ HEADER_RE = re.compile(r'^\d+ .*ECQB-PPL\(A\)$')
 FOOTER_RE = re.compile(r'^v\d{4}\.\d+ \d+$')
 POINTS_RE = re.compile(r'\s*\((\d+,\d{2}) P\.\)\s*$')
 ANNEX_RE = re.compile(r'^Siehe Anlage (\d+)\s*$')
+LIST_RE = re.compile(r'^([a-h]\)|\d{1,2}\.|[•\-–])\s')
 
 def page_lines(pg):
     txt = pg.extract_text(x_tolerance=1.5, y_tolerance=3) or ''
@@ -44,8 +45,8 @@ def join_lines(lines, log):
             sep = ' ' if re.match(r'^(und|oder|bzw\.|sowie|beziehungsweise)\b', l) else ''
             log.append(f'Trennstrich: "{out[-25:]}"{sep!r}"{l[:20]}"')
             out += sep + l
-        elif re.match(r'^[a-h]\) ', l) or re.match(r'^[a-h]\) ', out.split('\n')[-1]) or out.startswith('(Verwenden Sie') and out.endswith(')') and '\n' not in out:
-            out += '\n' + l            # Aufzählungen a) b) c) … zeilenweise erhalten
+        elif LIST_RE.match(l) or LIST_RE.match(out.split('\n')[-1]) or out.startswith('(Verwenden Sie') and out.endswith(')') and '\n' not in out:
+            out += '\n' + l            # Aufzählungen a) b) c) / 1. 2. 3. / • zeilenweise erhalten
         else:
             out += ' ' + l
     return out
