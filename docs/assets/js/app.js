@@ -208,7 +208,7 @@ const App = {
     Game.touchStreak(p);
     if (s.mode === 'exam') {
       const passed = sum.pct >= s.passPercent;
-      p.exams.push({ at: s.ended, total: sum.total, right: sum.right, pct: sum.pct, passed, topic: s.topic, secs: sum.secs });
+      p.exams.push({ at: s.ended, total: sum.total, right: sum.right, pct: sum.pct, passed, topic: s.topic, secs: sum.secs, answers: s.items.map(it => ({ id: it.q.id, picked: it.picked, ok: it.correct === true })) });
       if (p.exams.length > 50) p.exams = p.exams.slice(-50);
       if (passed) { p.xp += 50; s.xp += 50; }
     }
@@ -294,6 +294,12 @@ const App = {
       // Alles beantwortet → direkt auswerten, keine Rückfrage
       if (open && !await this.confirm(`${open} ${open === 1 ? 'Frage ist' : 'Fragen sind'} noch unbeantwortet und ${open === 1 ? 'zählt' : 'zählen'} als falsch. Trotzdem abgeben?`, { ok: 'Abgeben', cancel: 'Zurück' })) return;
       if (this.session === s) this.submitExam('manual');
+    },
+    'open-exam'(d) { const e = this.p.exams.find(x => x.at === Number(d.at)); if (e && e.answers) this.show('examReview', { at: e.at }); else U.toast('Für diese Prüfung wurden noch keine Antworten gespeichert.'); },
+    'retry-exam'(d) {
+      const e = this.p.exams.find(x => x.at === Number(d.at)); if (!e || !e.answers) return;
+      const byId = new Map(this.bank.questions.map(q => [q.id, q]));
+      this.startFromQuestions('review', e.answers.filter(a => !a.ok).map(a => byId.get(a.id)).filter(Boolean));
     },
     'retry-wrong'() { const s = this.lastSession; if (s) this.startFromQuestions('review', s.items.filter(it => !it.correct).map(it => it.q)); },
     'retry-same'() { const s = this.lastSession; if (s) { if (s.mode === 'exam') this.show('exam', { topic: s.topic }); else this.startFromQuestions(s.mode, s.items.map(it => it.q)); } },
@@ -400,6 +406,26 @@ const App = {
       this.p = Object.assign(Store.emptyProgress(), data.progress);
       this.save(); U.toast('Fortschritt importiert', { kind: 'ok' }); this.render();
     } catch (ex) { U.toast('Import fehlgeschlagen: ' + ex.message, { kind: 'bad' }); }
+  },
+
+  examRow(e) {
+    return `<button type="button" class="row" data-action="open-exam" data-at="${e.at}"><span class="ic">${e.passed ? '✅' : '❌'}</span><span class="grow"><b>${e.pct} %</b> · ${e.right}/${e.total} richtig<br><small class="muted">${U.fmtDate(e.at)} · ${U.esc(this.topicName(e.topic))}${e.secs ? ` · ${U.fmtTime(e.secs)} Min` : ''}</small></span><span class="chev">${e.answers ? '›' : ''}</span></button>`;
+  },
+  reviewCard(q, picked, ok, n) {
+    const c = Quiz.correctSet(q), letters = 'ABCDEFGH';
+    return `<div class="card review ${ok ? 'is-ok' : 'is-bad'}">
+      <div class="chips">${n ? `<span class="chip alt">${n}</span>` : ''}<span class="chip">${this.topicIcon(q.topic)} ${U.esc(this.topicName(q.topic))}</span><span class="chip ${ok ? 'good' : 'badc'}">${ok ? '✓ richtig' : (picked.length ? '✗ falsch' : '– nicht beantwortet')}</span></div>
+      <p class="qtext">${U.esc(q.q)}</p>
+      ${this.imgTag(q, 'qimg small')}
+      <div class="rev-answers">${q.a.map((a, i) => `<div class="ra ${c.has(i) ? 'is-correct' : ''} ${picked.includes(i) ? 'is-picked' : ''}"><span class="mark">${c.has(i) ? '✓' : (picked.includes(i) ? '✗' : letters[i])}</span><span>${U.esc(a)}${picked.includes(i) ? ' <small class="muted">(deine Antwort)</small>' : ''}</span></div>`).join('')}</div>
+      ${q.explanation ? `<p class="muted small">${U.esc(q.explanation)}</p>` : ''}${q.ref ? `<small class="muted">Quelle: ${U.esc(q.ref)}</small>` : ''}
+    </div>`;
+  },
+  reviewList(entries) {
+    // entries: [{q, picked, ok}] → erst falsche, dann richtige (einklappbar)
+    const wrong = entries.filter(e => !e.ok), right = entries.filter(e => e.ok);
+    return `${wrong.length ? `<h2 class="sect">Falsch oder offen (${wrong.length})</h2>${wrong.map((e, i) => this.reviewCard(e.q, e.picked, e.ok, e.n)).join('')}` : ''}
+      ${right.length ? `<h2 class="sect row"><span class="grow">Richtig (${right.length})</span><button type="button" class="link" data-action="toggle" data-target="#rev-right">${wrong.length ? 'anzeigen' : 'ausblenden'}</button></h2><div id="rev-right" ${wrong.length ? 'hidden' : ''}>${right.map(e => this.reviewCard(e.q, e.picked, e.ok, e.n)).join('')}</div>` : ''}`;
   },
 
   // ---------- Views ----------
@@ -519,7 +545,7 @@ const App = {
       const suggested = Math.max(1, Math.round(selN * perQ));
       const times = [...new Set([0, suggested, Math.round(suggested * 1.5), Math.round(suggested * 0.75)])].sort((a, b) => a - b);
       const selMin = minutes != null && times.includes(Number(minutes)) ? Number(minutes) : suggested;
-      const last = this.p.exams.slice(-3).reverse();
+      const last = this.p.exams.slice(-5).reverse();
       return `<div class="screen">
         <header class="top"><h1>Prüfungssimulation</h1><p class="muted">Wie in der echten Prüfung: keine Hilfe, Auswertung am Ende. Bestanden ab ${meta.passPercent} %${this.bank.topics.some(x => x.examQuestions) ? '. Bei „Alle Themen“ werden die Fragen wie in der Prüfung auf die Fächer verteilt' : ''}.</p></header>
         ${this.bank.topics.some(x => x.examQuestions) ? `<div class="card">
@@ -537,7 +563,7 @@ const App = {
           <label>Zeitlimit<select name="minutes">${times.map(m => `<option value="${m}" ${m === selMin ? 'selected' : ''}>${m ? m + ' Minuten' : 'Ohne Zeitlimit'}${m === suggested ? ' (empfohlen)' : ''}</option>`).join('')}</select></label>
           <button class="btn primary big" type="submit">Prüfung starten 📝</button>
         </form>
-        ${last.length ? `<div class="card"><b>Letzte Prüfungen</b><div class="list plain">${last.map(e => `<div class="row"><span class="ic">${e.passed ? '✅' : '❌'}</span><span class="grow"><b>${e.pct} %</b> · ${e.right}/${e.total} richtig<br><small class="muted">${U.fmtDate(e.at)} · ${U.esc(this.topicName(e.topic))}</small></span></div>`).join('')}</div></div>` : ''}
+        ${last.length ? `<div class="card"><b>Letzte Prüfungen</b><p class="muted small">Antippen, um alle Fragen mit deinen Antworten zu sehen.</p><div class="list plain">${last.map(e => this.examRow(e)).join('')}</div></div>` : ''}
       </div>`;
     },
     quiz({ overview } = {}) {
@@ -629,22 +655,27 @@ const App = {
           <button type="button" class="btn big" data-action="share">📤 Ergebnis teilen</button>
           <div class="row gap"><button type="button" class="btn grow" data-action="retry-same">Nochmal</button><button type="button" class="btn grow" data-action="nav" data-screen="home">Startseite</button></div>
         </div>
-        ${wrong.length ? `<h2 class="sect">Das solltest du dir ansehen</h2>${wrong.map(it => { const c = Quiz.correctSet(it.q); return `
-          <div class="card review">
-            <div class="chips"><span class="chip">${U.esc(this.topicName(it.q.topic))}</span></div>
-            <p class="qtext">${U.esc(it.q.q)}</p>
-            ${this.imgTag(it.q, 'qimg small')}
-            ${it.picked.length ? `<p class="ans bad">✗ Deine Antwort: ${it.picked.map(i => U.esc(it.q.a[i])).join(' / ')}</p>` : '<p class="ans bad">✗ Nicht beantwortet</p>'}
-            <p class="ans good">✓ Richtig: ${[...c].map(i => U.esc(it.q.a[i])).join(' / ')}</p>
-            ${it.q.explanation ? `<p class="muted small">${U.esc(it.q.explanation)}</p>` : ''}
-          </div>`; }).join('')}` : ''}
+        ${this.reviewList(s.items.map((it, i) => ({ q: it.q, picked: it.picked, ok: it.correct === true, n: i + 1 })))}
+        <p class="muted small center">${isExam ? 'Diese Prüfung findest du später unter „Prüfung“ und „Fortschritt“ wieder.' : ''}</p>
+      </div>`;
+    },
+    examReview({ at }) {
+      const e = this.p.exams.find(x => x.at === Number(at));
+      if (!e || !e.answers) return this.views.stats.call(this);
+      const byId = new Map(this.bank.questions.map(q => [q.id, q]));
+      const entries = e.answers.map((a, i) => ({ q: byId.get(a.id), picked: a.picked || [], ok: !!a.ok, n: i + 1 })).filter(x => x.q);
+      return `<div class="screen">
+        <header class="top row"><button type="button" class="icon" data-action="back">‹</button><div class="grow"><h1>Prüfung vom ${U.fmtDate(e.at)}</h1><p class="muted">${U.esc(this.topicName(e.topic))} · ${e.right}/${e.total} richtig · ${e.pct} % · ${e.passed ? 'bestanden ✅' : 'nicht bestanden ❌'}</p></div></header>
+        ${entries.length < e.answers.length ? '<p class="muted small">Einige Fragen sind im aktuellen Katalog nicht mehr enthalten.</p>' : ''}
+        ${this.reviewList(entries)}
+        <div class="stack"><button type="button" class="btn primary big" data-action="retry-exam" data-at="${e.at}" ${entries.some(x => !x.ok) ? '' : 'disabled'}>🔁 Falsche Fragen dieser Prüfung üben</button></div>
       </div>`;
     },
     stats() {
       const p = this.p, b = this.bank, lv = Game.levelFor(p.xp), rank = Game.rankFor(lv.level);
       const days = Array.from({ length: 7 }, (_, i) => { const k = U.dayKeyOffset(i - 6); return { k, d: p.days[k] || { answered: 0 }, label: ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][new Date(k + 'T00:00:00').getDay()] }; });
       const max = Math.max(1, ...days.map(x => x.d.answered));
-      const exams = p.exams.slice(-5).reverse();
+      const exams = p.exams.slice(-15).reverse();
       return `<div class="screen">
         <header class="top"><h1>Fortschritt</h1><p class="muted">${rank.icon} ${rank.name} · Level ${lv.level} · ${p.xp} XP</p></header>
         <div class="card"><div class="statrow four">
@@ -654,7 +685,7 @@ const App = {
         <div class="card"><b>Letzte 7 Tage</b><div class="chart">${days.map(x => `<div class="col"><div class="colbar" style="height:${Math.round(x.d.answered / max * 100)}%"><span>${x.d.answered || ''}</span></div><small>${x.label}</small></div>`).join('')}</div></div>
         <div class="card"><b>Themen</b><div class="list plain">${b.topics.map(t => { const m = Game.topicMastery(p, b, t.id); return `<div class="row"><span class="ic">${t.icon || '📘'}</span><span class="grow"><div class="row"><span class="grow">${U.esc(t.name)}</span><small class="muted">${m.pct} %</small></div><div class="bar small"><div style="width:${m.pct}%"></div></div></span></div>`; }).join('')}</div></div>
         <div class="card"><b>Abzeichen (${Object.keys(p.badges).length}/${Game.badges.length})</b><div class="badges">${Game.badges.map(bd => `<div class="badge ${p.badges[bd.id] ? 'on' : ''}" title="${U.esc(bd.desc)}"><span class="ic">${bd.icon}</span><small>${U.esc(bd.name)}</small><span class="desc">${U.esc(bd.desc)}</span></div>`).join('')}</div></div>
-        ${exams.length ? `<div class="card"><b>Prüfungen</b><div class="list plain">${exams.map(e => `<div class="row"><span class="ic">${e.passed ? '✅' : '❌'}</span><span class="grow"><b>${e.pct} %</b> · ${e.right}/${e.total}<br><small class="muted">${U.fmtDate(e.at)} · ${U.esc(this.topicName(e.topic))} · ${U.fmtTime(e.secs)} Min</small></span></div>`).join('')}</div></div>` : ''}
+        ${exams.length ? `<div class="card"><b>Prüfungen (${p.exams.length})</b><p class="muted small">Antippen, um alle Fragen mit deinen Antworten zu sehen.</p><div class="list plain">${exams.map(e => this.examRow(e)).join('')}</div></div>` : ''}
       </div>`;
     },
     profile() {

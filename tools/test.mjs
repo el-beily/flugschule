@@ -113,8 +113,17 @@ try {
   await shot('exam-result');
 
   // Statistik + Profil
+  // Rückblick: alle Fragen der Prüfung mit Antworten, auch später aus der Liste
+  assert(await page.evaluate(n => document.querySelectorAll('.card.review').length === n, examN), 'Ergebnis zeigt alle Prüfungsfragen');
   await page.click('[data-action=nav][data-screen=home]');
   await page.waitForSelector('.screen-home');
+  await page.click('[data-action=nav][data-screen=exam]');
+  await page.click('[data-action=open-exam]');
+  await page.waitForSelector('.screen-examReview');
+  assert(await page.evaluate(n => document.querySelectorAll('.card.review').length === n, examN), 'Rückblick zeigt alle Fragen');
+  await shot('exam-review');
+  await page.click('[data-action=back]');
+  await page.waitForSelector('form[data-form=exam]');
   await page.click('[data-action=nav][data-screen=stats]');
   await page.waitForSelector('.chart');
   await shot('stats');
